@@ -230,21 +230,79 @@ Demonstrates accessing MCP servers over HTTP.
 
 ## Web UI
 
-The framework includes a comprehensive web UI for managing agents, workflows, and MCP servers.
+The framework includes a comprehensive web UI for managing agents, workflows, and MCP servers. The interface is built with modern Tailwind CSS and Alpine.js for a responsive, professional experience.
 
 ### Features
 
-- **Agent Management**: Create, edit, and delete agents
-- **Visual Workflow Builder**: Drag and drop agents to create workflows
-- **MCP Server Management**: Create and configure MCP servers
-- **Workflow Execution**: Run workflows and view results in real-time
-- **Configuration Persistence**: Save and load configurations
+#### Agent Management Tab
+- **Create Agents**: Build new AI agents with custom system prompts, models, and configurations
+- **Edit Agents**: Update agent settings via dropdown interface
+- **Delete Agents**: Remove agents from the system
+- **Agent Configuration**: Set model (llama-3.3-70b-versatile, groq/compound, groq/compound-mini), temperature, and max tokens
+- **View Agent Details**: See agent ID, name, description, and model information
+
+#### MCP Servers Tab
+- **Create MCP Servers**: Set up new MCP-compliant servers
+- **Assign Agents**: Link agents to MCP servers for tool exposure
+- **Assign Workflows**: Connect workflows to MCP servers
+- **View Assignments**: See which agents and workflows are assigned to each server
+- **Delete Servers**: Remove MCP servers from the system
+
+#### Workflows Tab
+- **Visual Workflow Builder**: Drag and drop agents onto the canvas to create workflows
+- **Workflow Strategies**: Choose from:
+  - **Sequential**: Agents execute one after another
+  - **Parallel**: All agents execute simultaneously
+  - **Custom Workflow**: Define complex flows with conditions and branching
+- **Node Connections**: Connect workflow nodes by clicking output (→) and input (←) connection points
+- **Workflow Execution**: Run workflows with custom input and view step-by-step results
+- **Save Workflows**: Persist workflows with custom names
+- **Clear Canvas**: Reset the workflow builder
+
+#### Configuration Management
+- **Save Config**: Persist all agents, MCP servers, and workflows to local storage
+- **Load Config**: Restore previously saved configurations
 
 ### Accessing the UI
 
-1. Start the UI server (see [Quick Start](#quick-start))
-2. Open `http://localhost:3001` in your browser
-3. Use the tabs to navigate between Agents, MCP Servers, and Workflows
+1. **Start the UI server:**
+   ```typescript
+   const uiServer = framework.startUI({ port: 3001 });
+   await uiServer.start();
+   ```
+
+2. **Open in browser:**
+   Navigate to `http://localhost:3001`
+
+3. **Navigate tabs:**
+   - Click **Agents** to manage AI agents
+   - Click **MCP Servers** to manage MCP servers
+   - Click **Workflows** to build and execute workflows
+
+### Using the Workflow Builder
+
+1. **Add Agents to Workflow:**
+   - Drag agents from the left sidebar onto the canvas
+   - Or click on an agent to add it to the workflow
+
+2. **Connect Nodes:**
+   - Click the **→** (output) connection point on a node
+   - Click the **←** (input) connection point on another node
+   - A blue arrow line will connect them
+
+3. **Configure Workflow:**
+   - Enter a workflow name
+   - Select a strategy (Sequential, Parallel, or Custom Workflow)
+   - Add optional conditions to nodes
+
+4. **Execute:**
+   - Click **Execute** button
+   - Enter input when prompted
+   - View results below the canvas
+
+5. **Save:**
+   - Enter a workflow name
+   - Click **Save Workflow** to persist it
 
 ## REST API
 
