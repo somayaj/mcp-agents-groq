@@ -42,90 +42,131 @@ yarn add mcp-agents-groq
 - Node.js 18.0.0 or higher
 - A Groq API key ([Get one here](https://console.groq.com/))
 
-## Setup
-
-1. **Install dependencies:**
-
-```bash
-npm install
-```
-
-2. **Set up environment variables:**
-
-Create a `.env` file in the root directory:
-
-```bash
-GROQ_API_KEY=your_groq_api_key_here
-```
-
-3. **Build the project:**
-
-```bash
-npm run build
-```
-
 ## Quick Start
 
-### Basic Example
+### Complete Application Example
+
+Here's a complete example of building an application with `mcp-agents-groq`:
 
 ```typescript
 import dotenv from 'dotenv';
 import { MCPAgentsFramework } from 'mcp-agents-groq';
 
+// Load environment variables
 dotenv.config();
+
+// Initialize the framework with your Groq API key
+const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
+
+async function main() {
+  // 1. Create specialized agents
+  const researcher = framework.createAgent({
+    id: 'researcher',
+    name: 'Research Agent',
+    systemPrompt: 'You are an expert researcher. Analyze topics thoroughly and provide detailed information.',
+    model: 'llama-3.3-70b-versatile',
+    temperature: 0.7,
+    maxTokens: 2000,
+  });
+
+  const writer = framework.createAgent({
+    id: 'writer',
+    name: 'Writing Agent',
+    systemPrompt: 'You are a professional writer. Create clear, engaging content based on research.',
+    model: 'llama-3.3-70b-versatile',
+    temperature: 0.8,
+  });
+
+  const editor = framework.createAgent({
+    id: 'editor',
+    name: 'Editor Agent',
+    systemPrompt: 'You are an editor. Review and improve written content for clarity and style.',
+    model: 'llama-3.3-70b-versatile',
+  });
+
+  // 2. Create a sequential workflow
+  const workflow = framework.createOrchestrator('content-pipeline', {
+    strategy: 'sequential',
+    agents: ['researcher', 'writer', 'editor'],
+  });
+
+  // 3. Execute the workflow
+  console.log('Executing content pipeline...');
+  const result = await workflow.execute(
+    'Create a comprehensive article about artificial intelligence in healthcare'
+  );
+
+  console.log('Final result:', result.result);
+  console.log('Steps completed:', result.steps.length);
+
+  // 4. Start the Web UI for visual workflow management
+  const uiServer = framework.startUI({ port: 3001 });
+  await uiServer.start();
+  console.log('Web UI available at http://localhost:3001');
+  
+  // The UI allows you to:
+  // - Create and manage agents visually
+  // - Build workflows with drag-and-drop
+  // - Execute workflows and view results
+  // - Manage MCP servers
+}
+
+main().catch(console.error);
+```
+
+### Simple Agent Usage
+
+```typescript
+import { MCPAgentsFramework } from 'mcp-agents-groq';
 
 const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
 
-// Create an agent
+// Create a single agent
 const agent = framework.createAgent({
-  id: 'my-agent',
-  name: 'My Agent',
-  systemPrompt: 'You are a helpful assistant.',
+  id: 'assistant',
+  name: 'AI Assistant',
+  systemPrompt: 'You are a helpful AI assistant.',
   model: 'llama-3.3-70b-versatile',
 });
 
-// Process a message
-const response = await agent.process('What is artificial intelligence?');
+// Process messages
+const response = await agent.process('What is machine learning?');
 console.log(response.content);
+
+// Continue conversation
+const followUp = await agent.process('Can you explain neural networks?');
+console.log(followUp.content);
 ```
 
-### Starting the UI Server
+### Starting the Web UI
+
+The Web UI provides a visual interface for managing your agents and workflows:
 
 ```typescript
-const uiServer = framework.startUI({ port: 3001 });
+import { MCPAgentsFramework } from 'mcp-agents-groq';
+
+const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
+
+// Start the UI server
+const uiServer = framework.startUI({ 
+  port: 3001,
+  // Optional: enable persistence
+  persistence: {
+    enabled: true,
+    filePath: './config.json'
+  }
+});
+
 await uiServer.start();
-
-console.log('UI available at http://localhost:3001');
+console.log('Web UI available at http://localhost:3001');
 ```
 
-Visit `http://localhost:3001` to use the visual workflow builder.
-
-### Creating a Workflow
-
-```typescript
-// Create multiple agents
-const agent1 = framework.createAgent({
-  id: 'researcher',
-  name: 'Research Agent',
-  systemPrompt: 'You are a research assistant.',
-});
-
-const agent2 = framework.createAgent({
-  id: 'writer',
-  name: 'Writing Agent',
-  systemPrompt: 'You are a professional writer.',
-});
-
-// Create an orchestrator
-const orchestrator = framework.createOrchestrator('my-workflow', {
-  strategy: 'sequential',
-  agents: ['researcher', 'writer'],
-});
-
-// Execute the workflow
-const result = await orchestrator.execute('Research and write about quantum computing');
-console.log(result);
-```
+Visit `http://localhost:3001` to:
+- Create and configure agents
+- Build workflows visually
+- Execute workflows and view results
+- Manage MCP servers
+- Save and load configurations
 
 ## Documentation
 
@@ -192,41 +233,107 @@ class Orchestrator {
 }
 ```
 
-## Examples
+## Real-World Use Cases
 
-The framework includes several example files:
+### Content Generation Pipeline
 
-### Basic Example
+Create a multi-agent system for content creation:
 
-```bash
-npm run example
+```typescript
+const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
+
+// Research agent
+const researcher = framework.createAgent({
+  id: 'researcher',
+  systemPrompt: 'Research topics and gather information',
+});
+
+// Writer agent
+const writer = framework.createAgent({
+  id: 'writer',
+  systemPrompt: 'Write engaging content based on research',
+});
+
+// SEO agent
+const seoAgent = framework.createAgent({
+  id: 'seo',
+  systemPrompt: 'Optimize content for search engines',
+});
+
+// Create workflow
+const contentPipeline = framework.createOrchestrator('content', {
+  strategy: 'sequential',
+  agents: ['researcher', 'writer', 'seo'],
+});
+
+// Generate content
+const article = await contentPipeline.execute('Write about sustainable energy');
 ```
 
-Starts the UI server and demonstrates basic agent creation and usage.
+### Customer Support System
 
-### Workflow Example
+Build a customer support system with multiple specialized agents:
 
-```bash
-npm run example:workflow
+```typescript
+const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
+
+// Create specialized support agents
+const technical = framework.createAgent({
+  id: 'technical',
+  systemPrompt: 'Help with technical issues',
+});
+
+const billing = framework.createAgent({
+  id: 'billing',
+  systemPrompt: 'Assist with billing questions',
+});
+
+const general = framework.createAgent({
+  id: 'general',
+  systemPrompt: 'Handle general inquiries',
+});
+
+// Create MCP server to expose agents as tools
+const supportServer = framework.createMCPServer('support', {
+  name: 'Customer Support Server',
+  assignedAgents: ['technical', 'billing', 'general'],
+});
+
+// Agents are now accessible via MCP protocol
 ```
 
-Demonstrates creating and executing workflows with multiple agents.
+### Data Analysis Workflow
 
-### Governance Example
+Create a parallel processing workflow for data analysis:
 
-```bash
-npm run example:governance
+```typescript
+const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
+
+// Create analysis agents
+const dataAnalyst = framework.createAgent({
+  id: 'analyst',
+  systemPrompt: 'Analyze data and extract insights',
+});
+
+const visualizer = framework.createAgent({
+  id: 'visualizer',
+  systemPrompt: 'Create data visualizations',
+});
+
+const reporter = framework.createAgent({
+  id: 'reporter',
+  systemPrompt: 'Generate reports from analysis',
+});
+
+// Parallel workflow
+const analysis = framework.createOrchestrator('analysis', {
+  strategy: 'parallel',
+  agents: ['analyst', 'visualizer', 'reporter'],
+});
+
+// Process data in parallel
+const results = await analysis.execute('Analyze sales data for Q4');
 ```
-
-Shows how to use governance features like rate limiting, input validation, and content moderation.
-
-### HTTP MCP Server
-
-```bash
-npm run http:mcp
-```
-
-Demonstrates accessing MCP servers over HTTP.
 
 ## Web UI
 
