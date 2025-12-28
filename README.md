@@ -138,6 +138,50 @@ const followUp = await agent.process('Can you explain neural networks?');
 console.log(followUp.content);
 ```
 
+### Agent with Search Tool (Real-Time Financial Data)
+
+Agents can access real-time financial data using the built-in search tool:
+
+```typescript
+import { MCPAgentsFramework, createSearchTool } from 'mcp-agents-groq';
+
+const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
+
+// Create an agent with search capability
+const financialAnalyst = framework.createAgent({
+  id: 'analyst',
+  name: 'Financial Analyst',
+  systemPrompt: 'You are a financial analyst. Use the search tool to get real-time market data.',
+  model: 'llama-3.3-70b-versatile',
+  tools: [
+    createSearchTool(), // Real-time data from Yahoo Finance
+  ],
+});
+
+// Process financial queries - tool usage is automatically enforced
+const response = await financialAnalyst.process('What is the current stock price of Apple (AAPL)?');
+
+// The agent will automatically:
+// 1. Detect this is a financial query
+// 2. Call the search tool to fetch real-time data from Yahoo Finance
+// 3. Use ONLY the real data returned - no hypothetical data
+// 4. If data cannot be fetched, return an error instead of generating fake data
+console.log(response.content);
+```
+
+**Key Features:**
+- **Automatic Tool Enforcement**: Financial queries automatically trigger the search tool
+- **Real-Time Data**: Fetches current market data from Yahoo Finance API
+- **No Hypothetical Data**: Agents will error out if real data cannot be fetched, preventing inaccurate responses
+- **Smart Ticker Detection**: Automatically detects stock tickers, company names, and commodities
+- **Supported Assets**: Stocks, commodities (gold, silver, oil), cryptocurrencies, and more
+
+**Supported Query Types:**
+- Stock prices: "AAPL stock price", "Apple stock analysis"
+- Commodities: "Silver price", "Gold futures", "Oil prices"
+- Cryptocurrencies: "Bitcoin price", "BTC-USD"
+- Market analysis: "Netflix stock analysis for 2025"
+
 ### Agent with Graph/Chart Visualization
 
 Agents can create graphs and charts from data using the built-in graph tool:
@@ -588,7 +632,8 @@ mcp-agents-groq/
 │   │   └── UIServer.ts        # Web UI server
 │   ├── tools/
 │   │   ├── index.ts           # Tool exports
-│   │   └── search.ts          # Search tool implementations
+│   │   ├── search.ts           # Search tool (real-time financial data)
+│   │   └── graph.ts            # Graph/chart visualization tool
 │   ├── types/
 │   │   └── index.ts           # TypeScript type definitions
 │   └── index.ts               # Main exports
