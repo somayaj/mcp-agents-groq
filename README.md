@@ -578,9 +578,3 @@ For issues, questions, or contributions, please open an issue on the GitHub repo
 - UI built with [Tailwind CSS](https://tailwindcss.com/) and [Alpine.js](https://alpinejs.dev/)
 
 ---
-
-<div align="center">
-
-Made with ❤️ for the AI community
-
-</div>
