@@ -503,38 +503,27 @@ See the `examples/governance-example.ts` file in the repository for a complete e
 
 ## Development
 
-### Building
+If you're contributing to the `mcp-agents-groq` package itself, you can clone the repository and run the examples:
 
 ```bash
-# Build TypeScript and CSS
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/mcp-agents-groq.git
+cd mcp-agents-groq
+
+# Install dependencies
+npm install
+
+# Build the project
 npm run build
 
-# Build CSS only
-npm run build:css
+# Run examples (only available in the repository)
+npm run example              # Basic agent example
+npm run example:workflow     # Workflow orchestration example
+npm run example:governance   # Governance features example
+npm run http:mcp             # HTTP MCP server example
 ```
 
-### Development Mode
-
-```bash
-# Watch mode with auto-reload
-npm run dev
-```
-
-### Running Examples
-
-```bash
-# Basic example
-npm run example
-
-# Workflow example
-npm run example:workflow
-
-# Governance example
-npm run example:governance
-
-# HTTP MCP server
-npm run http:mcp
-```
+For end users who installed the package via npm, see the [Quick Start](#quick-start) section above for usage examples.
 
 ## Project Structure
 
