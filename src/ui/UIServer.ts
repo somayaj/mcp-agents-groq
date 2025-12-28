@@ -124,13 +124,8 @@ export class UIServer {
         }
         
         // Validate handler type
-        if (!['api', 'calculation', 'text', 'custom', 'javascript'].includes(tool.handlerType)) {
-          return res.status(400).json({ error: 'Invalid handlerType. Must be: api, calculation, text, custom, or javascript' });
-        }
-        
-        // For javascript type, validate that handlerConfig.code exists
-        if (tool.handlerType === 'javascript' && !tool.handlerConfig?.code) {
-          return res.status(400).json({ error: 'JavaScript code is required for javascript handler type' });
+        if (!['api', 'calculation', 'text', 'custom'].includes(tool.handlerType)) {
+          return res.status(400).json({ error: 'Invalid handlerType. Must be: api, calculation, text, or custom' });
         }
         
         this.customTools.set(tool.id, tool);
@@ -418,8 +413,18 @@ export class UIServer {
     // Workflow endpoints
     this.app.get('/api/workflows', (req: Request, res: Response) => {
       try {
+        // Return all orchestrators that have a name stored (saved workflows)
+        // OR all orchestrators with workflow strategy or workflow property
         const workflows = Array.from(this.orchestrators.entries())
-          .filter(([id, orch]) => orch.getConfig().strategy === 'workflow' || orch.getConfig().workflow)
+          .filter(([id, orch]) => {
+            // Include if it has a stored name (was saved via UI)
+            if (this.workflowNames.has(id)) {
+              return true;
+            }
+            // Also include if it's a workflow-type orchestrator
+            const config = orch.getConfig();
+            return config.strategy === 'workflow' || config.workflow;
+          })
           .map(([id, orch]) => {
             const config = orch.getConfig();
             return {
@@ -1336,43 +1341,47 @@ export class UIServer {
   private async loadConfiguration(config: SavedConfiguration): Promise<void> {
     if (!this.framework) return;
 
-        // Load agents
-        for (const agentConfig of config.agents) {
-          try {
-            // Remove tools when loading - handlers can't be deserialized
-            // CRITICAL: Tools without handlers will cause errors if Groq tries to use them
-            const agentConfigCopy = { ...agentConfig };
-            
-            // Save selectedTools before removing tools
-            const selectedTools = (agentConfigCopy as any).selectedTools;
-            
-            if (agentConfigCopy.tools) {
-              const toolNames = agentConfigCopy.tools.map((t: any) => t.name).join(', ');
-              console.warn(`Agent ${agentConfig.id}: Removing ${agentConfigCopy.tools.length} tool(s) during load (handlers can't be serialized): ${toolNames}`);
-              delete agentConfigCopy.tools;
+        // Load agents (if they exist in config)
+        if (config.agents && Array.isArray(config.agents)) {
+          for (const agentConfig of config.agents) {
+            try {
+              // Remove tools when loading - handlers can't be deserialized
+              // CRITICAL: Tools without handlers will cause errors if Groq tries to use them
+              const agentConfigCopy = { ...agentConfig };
+              
+              // Save selectedTools before removing tools
+              const selectedTools = (agentConfigCopy as any).selectedTools;
+              
+              if (agentConfigCopy.tools) {
+                const toolNames = agentConfigCopy.tools.map((t: any) => t.name).join(', ');
+                console.warn(`Agent ${agentConfig.id}: Removing ${agentConfigCopy.tools.length} tool(s) during load (handlers can't be serialized): ${toolNames}`);
+                delete agentConfigCopy.tools;
+              }
+              // Ensure tools is completely undefined, not just deleted
+              agentConfigCopy.tools = undefined;
+              const agent = this.framework.createAgent(agentConfigCopy);
+              
+              // Re-register tools from selectedTools if present
+              if (selectedTools && Array.isArray(selectedTools)) {
+                console.log(`[UI] Loading agent ${agentConfig.id} with tools from config:`, selectedTools);
+                selectedTools.forEach((toolId: string) => {
+                  const tool = this.getToolHandler(toolId);
+                  if (tool) {
+                    agent.registerTool(tool);
+                  } else {
+                    console.warn(`[UI] Tool ${toolId} not found when loading agent, skipping`);
+                  }
+                });
+              }
+              
+              this.agents.set(agentConfig.id, agent);
+              console.log(`Loaded agent ${agentConfig.id} (${agent.getName()}) - tools: ${agent.hasTools() ? agent.getToolNames().join(', ') : 'none'}`);
+            } catch (error) {
+              console.error(`Failed to load agent ${agentConfig.id}:`, error);
             }
-            // Ensure tools is completely undefined, not just deleted
-            agentConfigCopy.tools = undefined;
-            const agent = this.framework.createAgent(agentConfigCopy);
-            
-            // Re-register tools from selectedTools if present
-            if (selectedTools && Array.isArray(selectedTools)) {
-              console.log(`[UI] Loading agent ${agentConfig.id} with tools from config:`, selectedTools);
-              selectedTools.forEach((toolId: string) => {
-                const tool = this.getToolHandler(toolId);
-                if (tool) {
-                  agent.registerTool(tool);
-                } else {
-                  console.warn(`[UI] Tool ${toolId} not found when loading agent, skipping`);
-                }
-              });
-            }
-            
-            this.agents.set(agentConfig.id, agent);
-            console.log(`Loaded agent ${agentConfig.id} (${agent.getName()}) - tools: ${agent.hasTools() ? agent.getToolNames().join(', ') : 'none'}`);
-          } catch (error) {
-            console.error(`Failed to load agent ${agentConfig.id}:`, error);
           }
+        } else {
+          console.log('[UI] No agents found in config, starting with empty agents list');
         }
 
     // Load MCP servers (simplified - handlers can't be serialized)
@@ -1605,11 +1614,6 @@ export class UIServer {
         };
         break;
         
-      case 'javascript':
-        // Execute custom JavaScript code
-        handler = this.createJavaScriptHandler(toolDef.handlerConfig?.code || '');
-        break;
-        
       default:
         // Custom handler - return error as we can't execute arbitrary code
         handler = async (params: any) => {
@@ -1645,65 +1649,5 @@ export class UIServer {
     return null;
   }
   
-  private createJavaScriptHandler(code: string): (params: any) => Promise<any> {
-    // Validate code is not empty
-    if (!code || code.trim().length === 0) {
-      return async (params: any) => {
-        return {
-          success: false,
-          error: 'JavaScript handler code is empty',
-        };
-      };
-    }
-    
-    // Use Function constructor (safer than eval, but still executes code)
-    // This creates a function in the global scope
-    try {
-      // Wrap the code in an async function that returns a promise
-      // The code should return a value or throw an error
-      const wrappedCode = `
-        return (async function(params) {
-          ${code}
-        });
-      `;
-      
-      // Create the function
-      const createHandler = new Function(wrappedCode);
-      const handlerFunction = createHandler();
-      
-      // Return a wrapper that handles errors
-      return async (params: any) => {
-        try {
-          const result = await handlerFunction(params);
-          
-          // If result is already in the expected format, return it
-          if (result && typeof result === 'object' && ('success' in result || 'error' in result)) {
-            return result;
-          }
-          
-          // Otherwise wrap it
-          return {
-            success: true,
-            result: result,
-          };
-        } catch (error: any) {
-          console.error('[JavaScript Tool Handler] Error:', error);
-          return {
-            success: false,
-            error: error.message || 'Unknown error in JavaScript handler',
-            stack: error.stack,
-          };
-        }
-      };
-    } catch (error: any) {
-      console.error('[JavaScript Tool Handler] Compilation error:', error);
-      return async (params: any) => {
-        return {
-          success: false,
-          error: `JavaScript compilation error: ${error.message}`,
-        };
-      };
-    }
-  }
 }
 

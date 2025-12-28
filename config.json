@@ -1,14 +1,24 @@
 {
+  "agents": [
+    {
+      "id": "agent-1",
+      "name": "Web search agent",
+      "description": "Web search agent",
+      "systemPrompt": "You are a online web search agent. ",
+      "model": "llama-3.3-70b-versatile",
+      "temperature": "0",
+      "maxTokens": 4096,
+      "selectedTools": [
+        "search"
+      ]
+    }
+  ],
   "mcpServers": [
     {
       "id": "server-1",
       "config": {
         "name": "server-1",
-        "assignedAgents": [
-          "agent-1",
-          "agent-2",
-          "agent-3"
-        ],
+        "assignedAgents": [],
         "assignedWorkflows": []
       }
     },
@@ -16,89 +26,14 @@
       "id": "server-2",
       "config": {
         "name": "server-2",
-        "assignedAgents": [
-          "agent-1"
-        ],
+        "assignedAgents": [],
         "assignedWorkflows": []
       }
     }
   ],
   "orchestrators": [
     {
-      "id": "orchestrator-1",
-      "config": {
-        "agents": [
-          "agent-1",
-          "agent-2"
-        ]
-      }
-    },
-    {
-      "id": "default",
-      "config": {
-        "agents": [
-          "agent-4",
-          "Agent- 5",
-          "agent-6"
-        ],
-        "workflow": [
-          {
-            "id": "node_1766917992949",
-            "agentId": "agent-4",
-            "next": [
-              "node_1766917994244"
-            ]
-          },
-          {
-            "id": "node_1766917994244",
-            "agentId": "Agent- 5",
-            "next": [
-              "node_1766917995345"
-            ]
-          },
-          {
-            "id": "node_1766917995345",
-            "agentId": "agent-6",
-            "next": []
-          }
-        ],
-        "strategy": "workflow"
-      }
-    },
-    {
-      "id": "workflow-custom_workflow",
-      "config": {
-        "strategy": "workflow",
-        "agents": [
-          "agent-1",
-          "agent-2",
-          "agent-3"
-        ],
-        "workflow": [
-          {
-            "id": "node_1766891645787",
-            "agentId": "agent-1",
-            "next": [
-              "node_1766891646934"
-            ]
-          },
-          {
-            "id": "node_1766891646934",
-            "agentId": "agent-2",
-            "next": [
-              "node_1766891648219"
-            ]
-          },
-          {
-            "id": "node_1766891648219",
-            "agentId": "agent-3",
-            "next": []
-          }
-        ]
-      }
-    },
-    {
-      "id": "workflow-test_wrkl",
+      "id": "workflow-new",
       "config": {
         "strategy": "sequential",
         "agents": [
@@ -107,108 +42,15 @@
       }
     },
     {
-      "id": "workflow-visualizer",
+      "id": "default",
       "config": {
         "strategy": "sequential",
         "agents": [
-          "Agent- 5"
-        ]
-      }
-    },
-    {
-      "id": "workflow-analysis_workflow",
-      "config": {
-        "strategy": "sequential",
-        "agents": [
-          "agent-4",
-          "Agent- 5",
-          "agent-6"
-        ]
-      }
-    },
-    {
-      "id": "workflow-analysis",
-      "config": {
-        "strategy": "sequential",
-        "agents": [
-          "agent-4",
-          "Agent- 5",
-          "agent-6"
-        ]
-      }
-    },
-    {
-      "id": "workflow-analssis",
-      "config": {
-        "strategy": "parallel",
-        "agents": [
-          "agent-4",
-          "Agent- 5",
-          "agent-6"
-        ]
-      }
-    },
-    {
-      "id": "workflow-analysis_nflx",
-      "config": {
-        "strategy": "sequential",
-        "agents": [
-          "agent-4",
-          "Agent- 5",
-          "agent-6"
-        ]
-      }
-    },
-    {
-      "id": "workflow-visual",
-      "config": {
-        "strategy": "sequential",
-        "agents": [
-          "Agent- 5"
-        ]
-      }
-    },
-    {
-      "id": "workflow-v",
-      "config": {
-        "strategy": "sequential",
-        "agents": [
-          "Agent- 5"
-        ]
-      }
-    },
-    {
-      "id": "workflow-mastercard_workflow",
-      "config": {
-        "strategy": "workflow",
-        "agents": [
-          "agent-4",
-          "Agent- 5",
-          "agent-6"
-        ],
-        "workflow": [
-          {
-            "id": "node_1766917992949",
-            "agentId": "agent-4",
-            "next": [
-              "node_1766917994244"
-            ]
-          },
-          {
-            "id": "node_1766917994244",
-            "agentId": "Agent- 5",
-            "next": [
-              "node_1766917995345"
-            ]
-          },
-          {
-            "id": "node_1766917995345",
-            "agentId": "agent-6",
-            "next": []
-          }
+          "agent-1"
         ]
       }
     }
   ],
-  "timestamp": "2025-12-28T10:52:03.516Z"
+  "workflows": [],
+  "timestamp": "2025-12-28T11:57:53.452Z"
 }

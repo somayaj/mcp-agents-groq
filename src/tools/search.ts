@@ -443,7 +443,6 @@ async function getStockData(ticker: string, originalQuery: string): Promise<stri
     
     // Fetch with no-cache headers to ensure fresh data
     const response = await fetch(url, {
-      cache: 'no-store',
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
@@ -520,7 +519,9 @@ async function getStockData(ticker: string, originalQuery: string): Promise<stri
     stockInfo += `💰 CURRENT PRICE (LIVE): ${currentPrice?.toFixed(2) || 'N/A'} ${meta.currency || 'USD'}\n`;
     if (previousClose) {
       stockInfo += `📊 Previous Close: ${previousClose.toFixed(2)} ${meta.currency || 'USD'}\n`;
-      stockInfo += `📈 Change: ${change >= 0 ? '+' : ''}${change.toFixed(2)} (${changePercent >= 0 ? '+' : ''}${changePercent}%)\n`;
+      const changeNum = typeof change === 'number' ? change : parseFloat(String(change)) || 0;
+      const changePercentNum = typeof changePercent === 'number' ? changePercent : parseFloat(String(changePercent)) || 0;
+      stockInfo += `📈 Change: ${changeNum >= 0 ? '+' : ''}${changeNum.toFixed(2)} (${changePercentNum >= 0 ? '+' : ''}${changePercentNum}%)\n`;
     }
     stockInfo += `\n⚠️ This is the MOST RECENT price available from Yahoo Finance.\n`;
     
