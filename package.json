@@ -1,6 +1,6 @@
 {
   "name": "mcp-agents-groq",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A framework for creating AI MCP servers, agents, and orchestration with Groq integration",
   "main": "dist/index.js",
   "type": "module",
