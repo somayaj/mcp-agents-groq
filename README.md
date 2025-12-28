@@ -334,7 +334,7 @@ The framework includes comprehensive governance features:
 - Automatic blocking
 - Audit logging
 
-See [examples/governance-example.ts](examples/governance-example.ts) for a complete example.
+See the `examples/governance-example.ts` file in the repository for a complete example.
 
 ## Development
 
