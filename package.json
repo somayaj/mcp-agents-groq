@@ -4,11 +4,22 @@
   "description": "A framework for creating AI MCP servers, agents, and orchestration with Groq integration",
   "main": "dist/index.js",
   "type": "module",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/mcp-agents-groq.git"
+  },
   "scripts": {
     "build": "npm run build:css && tsc",
     "build:css": "node build-css.js",
     "dev": "npm run build:css && tsx watch src/index.ts",
     "start": "node dist/index.js",
+    "prepublishOnly": "npm run build",
     "example": "tsx examples/basic.ts",
     "example:workflow": "tsx examples/workflow.ts",
     "example:governance": "tsx examples/governance-example.ts",
@@ -21,7 +32,11 @@
     "agents",
     "groq",
     "ai",
-    "orchestration"
+    "orchestration",
+    "model-context-protocol",
+    "llm",
+    "workflow",
+    "automation"
   ],
   "author": "",
   "license": "MIT",
