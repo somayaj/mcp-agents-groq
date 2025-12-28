@@ -571,6 +571,100 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For issues, questions, or contributions, please open an issue on the GitHub repository.
 
+## How is this different from LangChain?
+
+`mcp-agents-groq` and LangChain serve different purposes and use cases:
+
+### Core Philosophy
+
+**mcp-agents-groq:**
+- **Specialized framework** for MCP (Model Context Protocol) servers
+- **Groq-optimized** for fast inference
+- **Opinionated** with built-in patterns and UI
+- Focuses on **agent orchestration** and **workflow management**
+
+**LangChain:**
+- **General-purpose** LLM framework
+- **Multi-provider** support (OpenAI, Anthropic, Google, etc.)
+- **Modular and composable** building blocks
+- Broader ecosystem with many integrations
+
+### Key Differences
+
+| Feature | mcp-agents-groq | LangChain |
+|---------|------------------|-----------|
+| **Focus** | MCP servers, Groq, workflows | General LLM framework |
+| **Complexity** | Lower - opinionated patterns | Higher - more flexible |
+| **Built-in UI** | ✅ Visual workflow builder | ❌ No built-in UI |
+| **MCP Support** | ✅ Native MCP server framework | ❌ No MCP support |
+| **LLM Providers** | Groq only (optimized for speed) | 50+ providers |
+| **Orchestration** | Built-in (sequential, parallel, custom) | You build it |
+| **Governance** | ✅ Built-in (rate limiting, moderation) | External tools needed |
+| **Persistence** | ✅ Built-in config save/load | External tools needed |
+| **Best For** | MCP servers, fast prototyping, visual workflows | Complex, multi-provider apps |
+
+### When to Use mcp-agents-groq
+
+✅ **Choose mcp-agents-groq if you:**
+- Need to build MCP-compliant servers
+- Want fast inference with Groq
+- Prefer visual workflow management
+- Need built-in governance and guardrails
+- Want to quickly prototype multi-agent systems
+- Need a ready-made web UI
+
+### When to Use LangChain
+
+✅ **Choose LangChain if you:**
+- Need support for multiple LLM providers
+- Want maximum flexibility and control
+- Need to integrate with many external tools/services
+- Are building complex, custom agent architectures
+- Need fine-grained control over agent behavior
+- Are doing research and experimentation
+
+### Code Comparison
+
+**mcp-agents-groq (simpler, opinionated):**
+```typescript
+// Create agents and workflow in ~10 lines
+const framework = new MCPAgentsFramework(apiKey);
+const researcher = framework.createAgent({
+  id: 'researcher',
+  systemPrompt: 'You are a research assistant.'
+});
+const writer = framework.createAgent({
+  id: 'writer',
+  systemPrompt: 'You are a professional writer.'
+});
+const workflow = framework.createOrchestrator('pipeline', {
+  strategy: 'sequential',
+  agents: ['researcher', 'writer']
+});
+const result = await workflow.execute('Write about AI');
+```
+
+**LangChain (more flexible, more setup):**
+```typescript
+// Requires more setup, more control
+const tools = [searchTool, calculatorTool];
+const agent = createOpenAIFunctionsAgent({
+  llm,
+  tools,
+  prompt: ChatPromptTemplate.fromMessages([...])
+});
+const executor = new AgentExecutor({ agent, tools });
+const result = await executor.invoke({ input: 'Write about AI' });
+```
+
+### Summary
+
+`mcp-agents-groq` is a **specialized framework** for building MCP servers and Groq-optimized workflows with a built-in visual UI. It's designed for speed, simplicity, and MCP compliance.
+
+LangChain is a **general-purpose framework** with broad provider support and maximum flexibility. It's designed for complex, multi-provider applications where you need fine-grained control.
+
+**They can complement each other** - use `mcp-agents-groq` for MCP servers and visual workflows, and LangChain for complex multi-provider applications.
+
 ## Acknowledgments
 
 - Built with [Groq](https://groq.com/) for fast LLM inference
