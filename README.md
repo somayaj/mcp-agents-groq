@@ -507,7 +507,7 @@ If you're contributing to the `mcp-agents-groq` package itself, you can clone th
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/mcp-agents-groq.git
+git clone https://github.com/somayajulaas/mcp-agents-groq.git
 cd mcp-agents-groq
 
 # Install dependencies
