@@ -1,32 +1,67 @@
 # MCP Agents Groq Framework
 
+<div align="center">
+
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)
+
 A comprehensive Node.js framework for creating AI MCP (Model Context Protocol) servers, managing agents, orchestrating workflows, and providing a web-based UI for workflow generation. Built with Groq for fast LLM inference.
+
+[Features](#features) • [Installation](#installation) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Examples](#examples)
+
+</div>
+
+---
 
 ## Features
 
-- 🤖 **AI Agents**: Create customizable agents powered by Groq
+- 🤖 **AI Agents**: Create customizable agents powered by Groq's fast LLM inference
 - 🔌 **MCP Servers**: Build MCP-compliant servers with tools and resources
 - 🎯 **Orchestration**: Coordinate multiple agents with sequential, parallel, or custom workflows
-- 🎨 **Web UI**: Visual workflow builder with Tailwind CSS
+- 🎨 **Web UI**: Visual workflow builder with modern Tailwind CSS interface
 - 🛡️ **Governance & Guardrails**: Input validation, output filtering, rate limiting, content moderation, and safety checks
-- 🛠️ **Customizable**: Fully extensible framework for your needs
+- 💾 **Persistence**: Save and load configurations automatically
+- 🔧 **Fully Customizable**: Extensible framework for your specific needs
+- 🌐 **HTTP Access**: Access MCP servers over HTTP REST API
 
 ## Installation
+
+```bash
+npm install mcp-agents-groq
+```
+
+Or using yarn:
+
+```bash
+yarn add mcp-agents-groq
+```
+
+## Prerequisites
+
+- Node.js 18.0.0 or higher
+- A Groq API key ([Get one here](https://console.groq.com/))
+
+## Setup
+
+1. **Install dependencies:**
 
 ```bash
 npm install
 ```
 
-## Setup
+2. **Set up environment variables:**
 
-1. Copy `.env.example` to `.env`:
+Create a `.env` file in the root directory:
+
 ```bash
-cp .env.example .env
+GROQ_API_KEY=your_groq_api_key_here
 ```
 
-2. Add your Groq API key to `.env`:
-```
-GROQ_API_KEY=your_groq_api_key_here
+3. **Build the project:**
+
+```bash
+npm run build
 ```
 
 ## Quick Start
@@ -34,33 +69,23 @@ GROQ_API_KEY=your_groq_api_key_here
 ### Basic Example
 
 ```typescript
-import { MCPAgentsFramework, createSearchTool } from './src/index.js';
-import { z } from 'zod';
+import dotenv from 'dotenv';
+import { MCPAgentsFramework } from 'mcp-agents-groq';
+
+dotenv.config();
 
 const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
 
-// Create an agent with a search tool
+// Create an agent
 const agent = framework.createAgent({
   id: 'my-agent',
   name: 'My Agent',
   systemPrompt: 'You are a helpful assistant.',
-  tools: [
-    createSearchTool(), // Use the built-in search tool
-    {
-      name: 'calculate',
-      description: 'Perform calculations',
-      parameters: z.object({
-        expression: z.string(),
-      }),
-      handler: async (params) => {
-        return eval(params.expression);
-      },
-    },
-  ],
+  model: 'llama-3.3-70b-versatile',
 });
 
 // Process a message
-const response = await agent.process('What is 2 + 2?');
+const response = await agent.process('What is artificial intelligence?');
 console.log(response.content);
 ```
 
@@ -69,161 +94,184 @@ console.log(response.content);
 ```typescript
 const uiServer = framework.startUI({ port: 3001 });
 await uiServer.start();
+
+console.log('UI available at http://localhost:3001');
 ```
 
-Then visit `http://localhost:3001` to use the workflow builder.
+Visit `http://localhost:3001` to use the visual workflow builder.
 
-### Creating an Orchestrator
+### Creating a Workflow
 
 ```typescript
-const orchestrator = framework.createOrchestrator('my-orchestrator', {
+// Create multiple agents
+const agent1 = framework.createAgent({
+  id: 'researcher',
+  name: 'Research Agent',
+  systemPrompt: 'You are a research assistant.',
+});
+
+const agent2 = framework.createAgent({
+  id: 'writer',
+  name: 'Writing Agent',
+  systemPrompt: 'You are a professional writer.',
+});
+
+// Create an orchestrator
+const orchestrator = framework.createOrchestrator('my-workflow', {
   strategy: 'sequential',
-  agents: ['agent-1', 'agent-2'],
+  agents: ['researcher', 'writer'],
 });
 
-const result = await orchestrator.execute('Process this task');
+// Execute the workflow
+const result = await orchestrator.execute('Research and write about quantum computing');
+console.log(result);
 ```
 
-### Creating an MCP Server
+## Documentation
+
+### Core Concepts
+
+#### Agents
+
+Agents are AI-powered assistants that can process messages and use tools. Each agent has:
+
+- **ID**: Unique identifier
+- **Name**: Display name
+- **System Prompt**: Instructions for the agent's behavior
+- **Model**: Groq model to use (default: `llama-3.3-70b-versatile`)
+- **Tools**: Functions the agent can call
+- **Configuration**: Temperature, max tokens, etc.
+
+#### MCP Servers
+
+MCP (Model Context Protocol) servers expose agents and workflows as tools and resources that can be accessed by MCP clients.
+
+#### Orchestrators
+
+Orchestrators coordinate multiple agents using different strategies:
+
+- **Sequential**: Agents execute one after another
+- **Parallel**: All agents execute simultaneously
+- **Workflow**: Custom workflow with conditions and branching
+
+### API Reference
+
+#### Framework
 
 ```typescript
-import { z } from 'zod';
-
-const mcpServer = framework.createMCPServer('my-server', {
-  name: 'My MCP Server',
-  version: '1.0.0',
-  tools: [
-    {
-      name: 'greet',
-      description: 'Greet someone',
-      inputSchema: z.object({
-        name: z.string(),
-      }),
-      handler: async (params) => {
-        return `Hello, ${params.name}!`;
-      },
-    },
-  ],
-});
-
-await mcpServer.start();
+class MCPAgentsFramework {
+  constructor(apiKey: string, config?: FrameworkConfig);
+  createAgent(config: AgentConfig, governance?: GovernanceConfig): Agent;
+  createOrchestrator(id: string, config: OrchestrationConfig): Orchestrator;
+  createMCPServer(id: string, config: MCPServerConfig): MCPServerFramework;
+  startUI(config?: UIConfig): UIServer;
+}
 ```
 
-### Accessing MCP Servers Over HTTP
+#### Agent
 
-MCP servers created via the UI can be accessed over HTTP using REST endpoints:
-
-```bash
-# List all tools for a server
-curl http://localhost:3001/api/mcp-servers/my-server/tools
-
-# Call a tool (e.g., an agent tool)
-curl -X POST http://localhost:3001/api/mcp-servers/my-server/tools/call \
-  -H "Content-Type: application/json" \
-  -d '{"name":"agent_agent-1","arguments":{"message":"Hello"}}'
-
-# List resources
-curl http://localhost:3001/api/mcp-servers/my-server/resources
-
-# Read a resource
-curl "http://localhost:3001/api/mcp-servers/my-server/resources/read?uri=mcp://agents/list"
+```typescript
+class Agent {
+  process(message: string, context?: Record<string, any>): Promise<AgentResponse>;
+  clearHistory(): void;
+  getId(): string;
+  getName(): string;
+  getConfig(): AgentConfig;
+  getHistory(): Message[];
+}
 ```
 
-**Available HTTP Endpoints:**
-- `GET /api/mcp-servers/:id/tools` - List all tools for a server
-- `POST /api/mcp-servers/:id/tools/call` - Call a tool
-- `GET /api/mcp-servers/:id/resources` - List all resources
-- `GET /api/mcp-servers/:id/resources/read?uri=<uri>` - Read a resource
+#### Orchestrator
 
-**See [Invoking MCP Server Guide](docs/INVOKING_MCP_SERVER.md) for detailed examples and usage.**
+```typescript
+class Orchestrator {
+  execute(input: string, context?: Record<string, any>): Promise<OrchestrationResult>;
+  registerAgents(agents: Agent[]): void;
+  getAgents(): Agent[];
+  getConfig(): OrchestrationConfig;
+}
+```
 
-## Running Examples
+## Examples
+
+The framework includes several example files:
+
+### Basic Example
 
 ```bash
 npm run example
 ```
 
-This will start the basic example with the UI server running on port 3001.
+Starts the UI server and demonstrates basic agent creation and usage.
 
-### Using Built-in Tools
+### Workflow Example
 
-The framework includes pre-built tools that you can use:
-
-```typescript
-import { MCPAgentsFramework, createSearchTool, wikipediaSearch, duckDuckGoSearch } from './src/index.js';
-
-const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
-
-// Create agent with default search tool (simulated)
-const agent1 = framework.createAgent({
-  id: 'agent-1',
-  name: 'Research Agent',
-  tools: [createSearchTool()],
-});
-
-// Create agent with Wikipedia search
-const agent2 = framework.createAgent({
-  id: 'agent-2',
-  name: 'Wikipedia Agent',
-  tools: [createSearchTool({ searchFunction: wikipediaSearch })],
-});
-
-// Create agent with DuckDuckGo search
-const agent3 = framework.createAgent({
-  id: 'agent-3',
-  name: 'DuckDuckGo Agent',
-  tools: [createSearchTool({ searchFunction: duckDuckGoSearch })],
-});
-
-// Create agent with custom search
-const agent4 = framework.createAgent({
-  id: 'agent-4',
-  name: 'Custom Search Agent',
-  tools: [
-    createSearchTool({
-      searchFunction: async (query: string) => {
-        // Your custom search implementation
-        return `Custom results for: ${query}`;
-      },
-    }),
-  ],
-});
+```bash
+npm run example:workflow
 ```
 
-See `examples/search-tool-example.ts` for a complete example.
+Demonstrates creating and executing workflows with multiple agents.
 
-## Workflow Builder UI
+### Governance Example
 
-The web UI provides:
+```bash
+npm run example:governance
+```
 
-- **Agent Management**: View and manage all registered agents
+Shows how to use governance features like rate limiting, input validation, and content moderation.
+
+### HTTP MCP Server
+
+```bash
+npm run http:mcp
+```
+
+Demonstrates accessing MCP servers over HTTP.
+
+## Web UI
+
+The framework includes a comprehensive web UI for managing agents, workflows, and MCP servers.
+
+### Features
+
+- **Agent Management**: Create, edit, and delete agents
 - **Visual Workflow Builder**: Drag and drop agents to create workflows
-- **Workflow Strategies**: Choose between sequential, parallel, or custom workflows
-- **Execution**: Run workflows and view results
-- **Save/Load**: Save workflows to browser storage
+- **MCP Server Management**: Create and configure MCP servers
+- **Workflow Execution**: Run workflows and view results in real-time
+- **Configuration Persistence**: Save and load configurations
 
-### Workflow Strategies
+### Accessing the UI
 
-1. **Sequential**: Agents execute one after another, passing results forward
-2. **Parallel**: All agents execute simultaneously
-3. **Custom Workflow**: Define complex workflows with conditions and branching
+1. Start the UI server (see [Quick Start](#quick-start))
+2. Open `http://localhost:3001` in your browser
+3. Use the tabs to navigate between Agents, MCP Servers, and Workflows
 
-## API Endpoints
+## REST API
 
-The UI server exposes the following REST API:
+The UI server exposes a REST API for programmatic access:
 
 ### Agents
+
 - `GET /api/agents` - List all agents
 - `GET /api/agents/:id` - Get agent details
+- `POST /api/agents` - Create a new agent
+- `PUT /api/agents/:id` - Update an agent
+- `DELETE /api/agents/:id` - Delete an agent
 - `POST /api/agents/:id/process` - Process a message with an agent
 - `POST /api/agents/:id/clear` - Clear agent history
 
-### Orchestrators
-- `GET /api/orchestrators` - List orchestrators
+### Orchestrators & Workflows
+
+- `GET /api/orchestrators` - List all orchestrators
 - `POST /api/orchestrators` - Create an orchestrator
 - `POST /api/orchestrators/:id/execute` - Execute an orchestrator
+- `GET /api/workflows` - List all workflows
+- `POST /api/workflows` - Create a workflow
+- `PUT /api/workflows/:id` - Update a workflow
+- `DELETE /api/workflows/:id` - Delete a workflow
 
 ### MCP Servers
+
 - `GET /api/mcp-servers` - List all MCP servers
 - `POST /api/mcp-servers` - Create an MCP server
 - `GET /api/mcp-servers/:id` - Get MCP server details
@@ -233,212 +281,152 @@ The UI server exposes the following REST API:
 - `GET /api/mcp-servers/:id/assigned` - Get assigned agents and workflows
 
 ### MCP Server HTTP Access
+
 - `GET /api/mcp-servers/:id/tools` - List all tools for a server
 - `POST /api/mcp-servers/:id/tools/call` - Call a tool
 - `GET /api/mcp-servers/:id/resources` - List all resources
 - `GET /api/mcp-servers/:id/resources/read?uri=<uri>` - Read a resource
 
-## Architecture
+### Configuration
 
-```
-src/
-├── core/
-│   ├── GroqClient.ts      # Groq API client wrapper
-│   ├── MCPServer.ts       # MCP server framework
-│   ├── Agent.ts           # Agent implementation
-│   └── Orchestrator.ts    # Agent orchestration
-├── ui/
-│   └── UIServer.ts        # Web UI server
-├── types/
-│   └── index.ts           # TypeScript types
-└── index.ts               # Main exports
-```
+- `GET /api/config` - Get current configuration
+- `POST /api/config/save` - Save configuration
+- `POST /api/config/load` - Load configuration
 
-## Customization
+### Governance
 
-### Custom Agent Tools
-
-```typescript
-const agent = framework.createAgent({
-  id: 'custom-agent',
-  name: 'Custom Agent',
-  tools: [
-    {
-      name: 'my-tool',
-      description: 'My custom tool',
-      parameters: z.object({
-        param1: z.string(),
-        param2: z.number(),
-      }),
-      handler: async (params, context) => {
-        // Your custom logic
-        return 'Result';
-      },
-    },
-  ],
-});
-```
-
-### Custom MCP Server Handlers
-
-```typescript
-const mcpServer = framework.createMCPServer('custom-server', {
-  name: 'Custom Server',
-  handlers: {
-    onRequest: async (request) => {
-      // Custom request handling
-      return { /* response */ };
-    },
-    onNotification: async (notification) => {
-      // Custom notification handling
-    },
-  },
-});
-```
-
-### Custom UI Routes
-
-```typescript
-const uiServer = framework.startUI({
-  port: 3001,
-  customRoutes: [
-    {
-      path: '/custom',
-      handler: (req, res) => {
-        res.json({ message: 'Custom route' });
-      },
-    },
-  ],
-});
-```
+- `GET /api/governance/stats/:agentId` - Get usage statistics for an agent
+- `GET /api/governance/config` - Get governance configuration
+- `POST /api/governance/config` - Update governance configuration
+- `POST /api/governance/reset/:agentId` - Reset usage statistics
 
 ## Governance & Guardrails
 
-The framework includes comprehensive governance features to ensure safe and controlled agent operations:
+The framework includes comprehensive governance features:
 
-### Features
+### Input Validation
 
-- **Input Validation**: Length limits, pattern matching, sanitization
-- **Output Filtering**: Content moderation, keyword blocking, length limits
-- **Rate Limiting**: Per-agent request limits with time windows
-- **Usage Tracking**: Request counts, token usage, daily/hourly limits
-- **Safety Checks**: Harmful content detection and blocking
-- **Audit Logging**: Complete audit trail of all operations
+- Length limits
+- Pattern matching
+- Content sanitization
 
-### Basic Usage
+### Output Filtering
 
-```typescript
-import { MCPAgentsFramework, GovernanceConfig } from './src/index.js';
-
-const governanceConfig: GovernanceConfig = {
-  // Input validation
-  maxInputLength: 5000,
-  blockedPatterns: [/<script/i, /javascript:/i],
-
-  // Output filtering
-  maxOutputLength: 20000,
-  contentModeration: true,
-  blockedKeywords: ['hack', 'exploit', 'malware'],
-
-  // Rate limiting
-  rateLimit: {
-    maxRequests: 10,
-    windowMs: 60000, // 1 minute
-  },
-
-  // Usage tracking
-  maxTokensPerRequest: 10000,
-  maxRequestsPerDay: 100,
-  maxRequestsPerHour: 20,
-
-  // Safety checks
-  enableSafetyChecks: true,
-  blockHarmfulContent: true,
-
-  // Audit logging
-  enableAuditLog: true,
-  auditLogPath: './audit.log',
-};
-
-// Initialize framework with governance
-const framework = new MCPAgentsFramework(apiKey, {
-  governance: governanceConfig,
-});
-
-// Create agent (inherits framework governance)
-const agent = framework.createAgent({
-  id: 'governed-agent',
-  name: 'Governed Agent',
-  systemPrompt: 'You are a helpful assistant.',
-});
-
-// Or create agent with custom governance
-const customAgent = framework.createAgent(
-  {
-    id: 'custom-governed-agent',
-    name: 'Custom Governed Agent',
-  },
-  {
-    maxInputLength: 10000, // Custom limit
-    rateLimit: { maxRequests: 20, windowMs: 60000 },
-  }
-);
-```
-
-### Governance API Endpoints
-
-The UI server exposes governance endpoints:
-
-```bash
-# Get usage statistics for an agent
-GET /api/governance/stats/:agentId
-
-# Get current governance configuration
-GET /api/governance/config
-
-# Update governance configuration
-POST /api/governance/config
-Content-Type: application/json
-{
-  "maxInputLength": 5000,
-  "rateLimit": { "maxRequests": 10, "windowMs": 60000 }
-}
-
-# Reset usage statistics for an agent
-POST /api/governance/reset/:agentId
-```
-
-### Example
-
-See `examples/governance-example.ts` for a complete example demonstrating:
-- Input validation
-- Rate limiting
 - Content moderation
-- Usage statistics
+- Keyword blocking
+- Length limits
+
+### Rate Limiting
+
+- Per-agent request limits
+- Time window configuration
+- Automatic throttling
+
+### Usage Tracking
+
+- Request counts
+- Token usage
+- Daily/hourly limits
+
+### Safety Checks
+
+- Harmful content detection
+- Automatic blocking
 - Audit logging
 
-Run it with:
-```bash
-npm run example:governance
-```
+See [examples/governance-example.ts](examples/governance-example.ts) for a complete example.
 
 ## Development
 
+### Building
+
 ```bash
-# Build TypeScript
+# Build TypeScript and CSS
 npm run build
 
-# Run in development mode
-npm run dev
-
-# Start production build
-npm start
-
-# Run governance example
-tsx examples/governance-example.ts
+# Build CSS only
+npm run build:css
 ```
+
+### Development Mode
+
+```bash
+# Watch mode with auto-reload
+npm run dev
+```
+
+### Running Examples
+
+```bash
+# Basic example
+npm run example
+
+# Workflow example
+npm run example:workflow
+
+# Governance example
+npm run example:governance
+
+# HTTP MCP server
+npm run http:mcp
+```
+
+## Project Structure
+
+```
+mcp-agents-groq/
+├── src/
+│   ├── core/
+│   │   ├── Agent.ts           # Agent implementation
+│   │   ├── GroqClient.ts      # Groq API client
+│   │   ├── MCPServer.ts       # MCP server framework
+│   │   ├── Orchestrator.ts    # Agent orchestration
+│   │   ├── Governance.ts       # Governance & guardrails
+│   │   └── Persistence.ts     # Configuration persistence
+│   ├── ui/
+│   │   └── UIServer.ts        # Web UI server
+│   ├── tools/
+│   │   ├── index.ts           # Tool exports
+│   │   └── search.ts          # Search tool implementations
+│   ├── types/
+│   │   └── index.ts           # TypeScript type definitions
+│   └── index.ts               # Main exports
+├── examples/                  # Example files
+├── docs/                      # Documentation
+├── public/                    # Web UI static files
+│   ├── index.html            # Main UI page
+│   └── styles.css            # Tailwind CSS source
+└── package.json
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'MAG-XXX: Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Support
+
+For issues, questions, or contributions, please open an issue on the GitHub repository.
+
+## Acknowledgments
+
+- Built with [Groq](https://groq.com/) for fast LLM inference
+- Uses [Model Context Protocol](https://modelcontextprotocol.io/) for agent communication
+- UI built with [Tailwind CSS](https://tailwindcss.com/) and [Alpine.js](https://alpinejs.dev/)
+
+---
+
+<div align="center">
+
+Made with ❤️ for the AI community
+
+</div>
