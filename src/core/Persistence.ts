@@ -1,6 +1,21 @@
 import { promises as fs } from 'fs';
 import { AgentConfig, MCPServerConfig, OrchestrationConfig } from '../types/index.js';
 
+export interface CustomToolDefinition {
+  id: string;
+  name: string;
+  description: string;
+  handlerType: 'api' | 'calculation' | 'text' | 'custom';
+  parameters: any; // Zod schema as JSON
+  handlerConfig?: {
+    url?: string;
+    method?: string;
+    headers?: Record<string, string>;
+    operation?: string;
+    template?: string;
+  };
+}
+
 export interface SavedConfiguration {
   agents: AgentConfig[];
   mcpServers: Array<{ id: string; config: MCPServerConfig }>;
@@ -12,6 +27,7 @@ export interface SavedConfiguration {
     agents: string[];
     workflow?: any[];
   }>;
+  customTools?: CustomToolDefinition[];
   timestamp: string;
 }
 

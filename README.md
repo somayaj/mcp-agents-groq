@@ -138,6 +138,53 @@ const followUp = await agent.process('Can you explain neural networks?');
 console.log(followUp.content);
 ```
 
+### Agent with Graph/Chart Visualization
+
+Agents can create graphs and charts from data using the built-in graph tool:
+
+```typescript
+import { MCPAgentsFramework, createGraphTool } from 'mcp-agents-groq';
+
+const framework = new MCPAgentsFramework(process.env.GROQ_API_KEY!);
+
+// Create an agent with graph visualization capability
+const dataAnalyst = framework.createAgent({
+  id: 'analyst',
+  name: 'Data Analyst',
+  systemPrompt: 'You are a data analyst. When you receive data, create visualizations using the create_graph tool.',
+  model: 'llama-3.3-70b-versatile',
+  tools: [
+    createGraphTool({
+      outputFormat: 'html', // Options: 'html', 'svg', 'base64', 'url'
+      chartLibrary: 'chartjs', // Options: 'chartjs', 'd3', 'plotly'
+    }),
+  ],
+});
+
+// Process data and create a chart
+const response = await dataAnalyst.process(
+  'Create a bar chart for this sales data: Q1: 45000, Q2: 52000, Q3: 48000, Q4: 61000'
+);
+
+// The agent will use the graph tool and return chart HTML
+console.log(response.content);
+// Response includes chart HTML that can be saved or displayed in a browser
+```
+
+**Supported Chart Types:**
+- `line` - Line charts
+- `bar` - Bar charts
+- `pie` - Pie charts
+- `scatter` - Scatter plots
+- `area` - Area charts
+- `histogram` - Histograms
+
+**Output Formats:**
+- `html` - Interactive HTML with Chart.js (default)
+- `svg` - Scalable Vector Graphics
+- `base64` - Base64 encoded image (requires additional setup)
+- `url` - URL to stored chart (requires storage configuration)
+
 ### Starting the Web UI
 
 The Web UI provides a visual interface for managing your agents and workflows:

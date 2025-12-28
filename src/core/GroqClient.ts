@@ -99,16 +99,15 @@ export class GroqClient {
       }
 
     try {
-      // Log request for debugging (without sensitive data)
-      if (process.env.DEBUG) {
-        console.log('Groq Request:', {
-          model: request.model,
-          messageCount: request.messages.length,
-          hasTools: !!request.tools,
-          toolCount: request.tools?.length || 0,
-          toolChoice: request.tool_choice,
-        });
-      }
+      // Log request for debugging (always log tools info)
+      console.log('[GroqClient] Request:', {
+        model: request.model,
+        messageCount: request.messages.length,
+        hasTools: !!request.tools,
+        toolCount: request.tools?.length || 0,
+        toolNames: request.tools?.map((t: any) => t.function?.name).filter(Boolean) || [],
+        toolChoice: request.tool_choice,
+      });
       
       const response = await this.client.chat.completions.create(request);
       const message = response.choices[0]?.message;
@@ -262,36 +261,69 @@ export class GroqClient {
   }
 
   private zodToJsonSchema(schema: any): any {
-    // Simple conversion - in production, use a proper zod-to-json-schema library
-    if (schema._def?.typeName === 'ZodObject') {
-      const shape = schema._def.shape();
-      const properties: any = {};
-      const required: string[] = [];
+    // Improved conversion to handle nested objects, arrays, unions, and enums
+    const convertZodType = (zodType: any): any => {
+      const typeName = zodType._def?.typeName;
+      
+      if (typeName === 'ZodString') {
+        return { type: 'string' };
+      } else if (typeName === 'ZodNumber') {
+        return { type: 'number' };
+      } else if (typeName === 'ZodBoolean') {
+        return { type: 'boolean' };
+      } else if (typeName === 'ZodOptional') {
+        return convertZodType(zodType._def.innerType);
+      } else if (typeName === 'ZodArray') {
+        const itemType = zodType._def.type;
+        return {
+          type: 'array',
+          items: convertZodType(itemType),
+        };
+      } else if (typeName === 'ZodObject') {
+        const shape = zodType._def.shape();
+        const properties: any = {};
+        const required: string[] = [];
 
-      for (const [key, value] of Object.entries(shape)) {
-        const zodType = value as any;
-        if (zodType._def?.typeName === 'ZodString') {
-          properties[key] = { type: 'string' };
-        } else if (zodType._def?.typeName === 'ZodNumber') {
-          properties[key] = { type: 'number' };
-        } else if (zodType._def?.typeName === 'ZodBoolean') {
-          properties[key] = { type: 'boolean' };
-        } else if (zodType._def?.typeName === 'ZodArray') {
-          properties[key] = { type: 'array' };
-        } else {
-          properties[key] = { type: 'string' }; // fallback
+        for (const [key, value] of Object.entries(shape)) {
+          const fieldType = value as any;
+          properties[key] = convertZodType(fieldType);
+          
+          if (!fieldType.isOptional && fieldType._def?.typeName !== 'ZodOptional') {
+            required.push(key);
+          }
         }
 
-        if (!zodType.isOptional()) {
-          required.push(key);
+        return {
+          type: 'object',
+          properties,
+          required: required.length > 0 ? required : undefined,
+        };
+      } else if (typeName === 'ZodUnion') {
+        // For union types, use the first type (usually string | number becomes string)
+        const options = zodType._def.options || [];
+        if (options.length > 0) {
+          // Check if it's string | number, use string as default
+          const hasString = options.some((opt: any) => opt._def?.typeName === 'ZodString');
+          const hasNumber = options.some((opt: any) => opt._def?.typeName === 'ZodNumber');
+          if (hasString && hasNumber) {
+            return { type: 'string', description: 'Can be string or number' };
+          }
+          return convertZodType(options[0]);
         }
+        return { type: 'string' };
+      } else if (typeName === 'ZodEnum') {
+        const values = zodType._def.values || [];
+        return {
+          type: 'string',
+          enum: values,
+        };
       }
+      
+      return { type: 'string' }; // fallback
+    };
 
-      return {
-        type: 'object',
-        properties,
-        required: required.length > 0 ? required : undefined,
-      };
+    if (schema._def?.typeName === 'ZodObject') {
+      return convertZodType(schema);
     }
 
     return { type: 'object', properties: {} };

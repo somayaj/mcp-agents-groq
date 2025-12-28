@@ -45,7 +45,8 @@ export class Orchestrator {
     context?: Record<string, any>
   ): Promise<{
     result: string;
-    steps: Array<{ agentId: string; response: string; error?: string }>;
+    steps: Array<{ agentId: string; response: string; error?: string; metadata?: Record<string, any> }>;
+    metadata?: Record<string, any>;
   }> {
     this.executionContext = { ...context, input };
 
@@ -63,9 +64,10 @@ export class Orchestrator {
 
   private async executeSequential(input: string): Promise<{
     result: string;
-    steps: Array<{ agentId: string; response: string; error?: string }>;
+    steps: Array<{ agentId: string; response: string; error?: string; metadata?: Record<string, any> }>;
+    metadata?: Record<string, any>;
   }> {
-    const steps: Array<{ agentId: string; response: string; error?: string }> = [];
+    const steps: Array<{ agentId: string; response: string; error?: string; metadata?: Record<string, any> }> = [];
     let currentInput = input;
 
     // Remove duplicates - only execute each agent once
@@ -92,6 +94,7 @@ export class Orchestrator {
           agentId,
           response: response.content,
           error: response.metadata?.finishReason === 'error' ? 'Agent encountered an error' : undefined,
+          metadata: response.metadata, // Include metadata (graphs, etc.)
         });
       } catch (error: any) {
         console.error(`Error in agent ${agentId}:`, error);
@@ -108,15 +111,38 @@ export class Orchestrator {
       currentInput = response.content;
     }
 
+    // Collect all graphs from steps for final result metadata
+    // Filter out empty or invalid graphs
+    const allGraphs: any[] = [];
+    steps.forEach(step => {
+      if (step.metadata?.graphs && Array.isArray(step.metadata.graphs)) {
+        const validGraphs = step.metadata.graphs.filter((g: any) => {
+          if (!g || !g.chart) return false;
+          const chartContent = String(g.chart).trim();
+          if (chartContent.length === 0) return false;
+          // Check for actual chart elements
+          const hasCanvas = chartContent.includes('<canvas');
+          const hasSVG = chartContent.includes('<svg') && chartContent.includes('</svg>');
+          const hasScript = chartContent.includes('<script') && chartContent.includes('Chart');
+          // For HTML charts, must have canvas AND script; for SVG, must have complete SVG
+          const isValidChart = (hasCanvas && hasScript) || (hasSVG && chartContent.length > 200);
+          return isValidChart;
+        });
+        allGraphs.push(...validGraphs);
+      }
+    });
+
     return {
       result: currentInput,
       steps,
+      metadata: allGraphs.length > 0 ? { graphs: allGraphs } : undefined,
     };
   }
 
   private async executeParallel(input: string): Promise<{
     result: string;
-    steps: Array<{ agentId: string; response: string; error?: string }>;
+    steps: Array<{ agentId: string; response: string; error?: string; metadata?: Record<string, any> }>;
+    metadata?: Record<string, any>;
   }> {
     // Remove duplicates - only execute each agent once
     const uniqueAgentIds = Array.from(new Set(this.config.agents));
@@ -141,6 +167,7 @@ export class Orchestrator {
           agentId,
           response: response.content,
           error: response.metadata?.finishReason === 'error' ? 'Agent encountered an error' : undefined,
+          metadata: response.metadata, // Include metadata (graphs, etc.)
         };
       } catch (error: any) {
         console.error(`Error in parallel agent ${agentId}:`, error);
@@ -159,17 +186,40 @@ export class Orchestrator {
       .map(s => `${s.agentId}: ${s.response}`)
       .join('\n\n');
 
+    // Collect all graphs from steps for final result metadata
+    // Filter out empty or invalid graphs
+    const allGraphs: any[] = [];
+    steps.forEach(step => {
+      if (step.metadata?.graphs && Array.isArray(step.metadata.graphs)) {
+        const validGraphs = step.metadata.graphs.filter((g: any) => {
+          if (!g || !g.chart) return false;
+          const chartContent = String(g.chart).trim();
+          if (chartContent.length === 0) return false;
+          // Check for actual chart elements
+          const hasCanvas = chartContent.includes('<canvas');
+          const hasSVG = chartContent.includes('<svg') && chartContent.includes('</svg>');
+          const hasScript = chartContent.includes('<script') && chartContent.includes('Chart');
+          // For HTML charts, must have canvas AND script; for SVG, must have complete SVG
+          const isValidChart = (hasCanvas && hasScript) || (hasSVG && chartContent.length > 200);
+          return isValidChart;
+        });
+        allGraphs.push(...validGraphs);
+      }
+    });
+
     return {
       result: combinedResult,
       steps,
+      metadata: allGraphs.length > 0 ? { graphs: allGraphs } : undefined,
     };
   }
 
   private async executeWorkflow(input: string): Promise<{
     result: string;
-    steps: Array<{ agentId: string; response: string; error?: string }>;
+    steps: Array<{ agentId: string; response: string; error?: string; metadata?: Record<string, any> }>;
+    metadata?: Record<string, any>;
   }> {
-    const steps: Array<{ agentId: string; response: string; error?: string }> = [];
+    const steps: Array<{ agentId: string; response: string; error?: string; metadata?: Record<string, any> }> = [];
     const visited = new Set<string>();
 
     if (!this.config.workflow || this.config.workflow.length === 0) {
@@ -201,16 +251,58 @@ export class Orchestrator {
       throw new Error('Workflow execution produced no steps. Check workflow configuration and agent assignments.');
     }
 
+    // Collect all graphs from steps for final result metadata
+    // Filter out empty or invalid graphs
+    const allGraphs: any[] = [];
+    console.log(`[Orchestrator] Collecting graphs from ${steps.length} step(s)`);
+    steps.forEach((step, stepIndex) => {
+      console.log(`[Orchestrator] Step ${stepIndex} (${step.agentId}): hasMetadata=${!!step.metadata}, metadataKeys=${step.metadata ? Object.keys(step.metadata).join(',') : 'none'}`);
+      if (step.metadata?.graphs && Array.isArray(step.metadata.graphs)) {
+        console.log(`[Orchestrator] Step ${step.agentId} has ${step.metadata.graphs.length} graph(s) in metadata`);
+        const validGraphs = step.metadata.graphs.filter((g: any, graphIndex: number) => {
+          if (!g || !g.chart) {
+            console.log(`[Orchestrator] Graph ${graphIndex} missing chart property`);
+            return false;
+          }
+          const chartContent = String(g.chart).trim();
+          if (chartContent.length === 0) {
+            console.log(`[Orchestrator] Graph ${graphIndex} has empty chart content`);
+            return false;
+          }
+          // Check for actual chart elements
+          const hasCanvas = chartContent.includes('<canvas');
+          const hasSVG = chartContent.includes('<svg') && chartContent.includes('</svg>');
+          const hasScript = chartContent.includes('<script');
+          // For HTML charts, must have canvas and substantial content (script is optional)
+          // For SVG, must have complete SVG
+          const isValidChart = (hasCanvas && chartContent.length > 1000) || (hasSVG && chartContent.length > 200);
+          if (!isValidChart) {
+            console.log(`[Orchestrator] Graph ${graphIndex} validation failed: hasCanvas=${hasCanvas}, hasSVG=${hasSVG}, hasScript=${hasScript}, length=${chartContent.length}, title=${g.title || 'untitled'}`);
+          } else {
+            console.log(`[Orchestrator] Graph ${graphIndex} is valid: title=${g.title || 'untitled'}, length=${chartContent.length}`);
+          }
+          return isValidChart;
+        });
+        console.log(`[Orchestrator] Step ${step.agentId}: ${validGraphs.length} valid graph(s) out of ${step.metadata.graphs.length}`);
+        allGraphs.push(...validGraphs);
+      } else {
+        console.log(`[Orchestrator] Step ${step.agentId}: No graphs in metadata (hasMetadata=${!!step.metadata}, hasGraphs=${!!step.metadata?.graphs}, isArray=${Array.isArray(step.metadata?.graphs)})`);
+      }
+    });
+
+    console.log(`[Orchestrator] Total graphs collected for final metadata: ${allGraphs.length}`);
+
     return {
       result: steps[steps.length - 1]?.response || input,
       steps,
+      metadata: allGraphs.length > 0 ? { graphs: allGraphs } : undefined,
     };
   }
 
   private async executeStep(
     stepId: string,
     input: string,
-    steps: Array<{ agentId: string; response: string; error?: string }>,
+    steps: Array<{ agentId: string; response: string; error?: string; metadata?: Record<string, any> }>,
     visited: Set<string>
   ): Promise<void> {
     if (visited.has(stepId)) {
@@ -252,10 +344,12 @@ export class Orchestrator {
     let response;
     try {
       response = await agent.process(input, context);
+      console.log(`[Orchestrator] Agent ${step.agentId} response has metadata:`, !!response.metadata, response.metadata ? Object.keys(response.metadata) : []);
       steps.push({
         agentId: step.agentId,
         response: response.content,
         error: response.metadata?.finishReason === 'error' ? 'Agent encountered an error' : undefined,
+        metadata: response.metadata, // Include metadata (graphs, etc.)
       });
     } catch (error: any) {
       console.error(`Error in workflow step ${stepId} (agent ${step.agentId}):`, error);
@@ -291,6 +385,16 @@ export class Orchestrator {
       agents: Array.from(this.agents.keys()),
       workflow: this.config.workflow ? [...this.config.workflow] : undefined,
     };
+  }
+
+  updateConfig(updates: Partial<OrchestrationConfig>): void {
+    // Update config
+    this.config = { ...this.config, ...updates };
+    
+    // Update workflow map if workflow changed
+    if (updates.workflow !== undefined) {
+      this.updateWorkflowMap();
+    }
   }
 
   updateContext(key: string, value: any): void {

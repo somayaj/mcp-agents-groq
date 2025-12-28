@@ -15,11 +15,12 @@ export * from './tools/index.js';
 
 // Framework class for easy setup
 import { GroqClient } from './core/GroqClient.js';
-import { Agent, AgentConfig } from './core/Agent.js';
-import { Orchestrator, OrchestrationConfig } from './core/Orchestrator.js';
-import { MCPServerFramework, MCPServerConfig } from './core/MCPServer.js';
-import { UIServer, UIConfig } from './ui/UIServer.js';
-import { GovernanceService, GovernanceConfig } from './core/Governance.js';
+import { Agent } from './core/Agent.js';
+import { Orchestrator } from './core/Orchestrator.js';
+import { MCPServerFramework } from './core/MCPServer.js';
+import { UIServer } from './ui/UIServer.js';
+import { GovernanceService } from './core/Governance.js';
+import type { AgentConfig, OrchestrationConfig, MCPServerConfig, UIConfig, GovernanceConfig } from './types/index.js';
 
 export class MCPAgentsFramework {
   private groqClient: GroqClient;

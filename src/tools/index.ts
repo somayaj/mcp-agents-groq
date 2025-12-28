@@ -6,4 +6,6 @@
  */
 
 export { createSearchTool, wikipediaSearch, duckDuckGoSearch } from './search.js';
+export { createGraphTool } from './graph.js';
+export type { ChartType, DataPoint, ChartConfig } from './graph.js';
 

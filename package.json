@@ -17,7 +17,7 @@
   "scripts": {
     "build": "npm run build:css && tsc",
     "build:css": "node build-css.js",
-    "dev": "npm run build:css && tsx watch src/index.ts",
+    "dev": "npm run build:css && tsx watch src/start-server.ts",
     "start": "node dist/index.js",
     "prepublishOnly": "npm run build",
     "example": "tsx examples/basic.ts",
