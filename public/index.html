@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Agents & Workflow Builder</title>
+    <link rel="stylesheet" href="/dist/styles.css">
+    <script>
+        // Define workflowApp before Alpine.js loads
+        function workflowApp() {
+            return {
+                activeTab: 'agents',
+                agents: [],
+                mcpServers: [],
+                workflowNodes: [],
+                connections: [],
+                selectedStrategy: 'sequential',
+                executionResult: null,
+                draggedAgent: null,
+                connectingFrom: null,
+                connectingTo: null,
+                connectingFromNode: null,
+                connectingFromX: 0,
+                connectingFromY: 0,
+                startNodeId: null,
+                workflowName: '',
+                canvasWidth: 0,
+                canvasHeight: 0,
+                newAgent: {
+                    id: '',
+                    name: '',
+                    description: '',
+                    systemPrompt: '',
+                    model: 'llama-3.3-70b-versatile',
+                    temperature: 0.7,
+                    maxTokens: 4096
+                },
+                editingAgent: null,
+                openEditDropdown: null,
+                editDropdownTop: 0,
+                editDropdownRight: 0,
+                editAgentForm: {
+                    id: '',
+                    name: '',
+                    description: '',
+                    systemPrompt: '',
+                    model: 'llama-3.3-70b-versatile',
+                    temperature: 0.7,
+                    maxTokens: 4096
+                },
+                newMCPServer: {
+                    id: '',
+                    name: '',
+                    version: '1.0.0',
+                    description: ''
+                },
+                selectedServerForAssign: null,
+                assignDialogOpen: false,
+                availableAgentsForAssign: [],
+                availableWorkflowsForAssign: [],
+                selectedAgentsForAssign: [],
+                selectedWorkflowsForAssign: [],
+                // Modal state
+                modalOpen: false,
+                modalType: 'alert', // 'alert', 'confirm', 'prompt'
+                modalTitle: '',
+                modalMessage: '',
+                modalInput: '',
+                modalCallback: null,
+                modalConfirmText: 'OK',
+                modalCancelText: 'Cancel',
+                // Loading state
+                isExecuting: false,
+                async loadAgents() {
+                    try {
+                        const response = await fetch('/api/agents');
+                        this.agents = await response.json();
+                    } catch (error) {
+                        console.error('Error loading agents:', error);
+                        await this.showAlert('Failed to load agents');
+                    }
+                },
+                async createAgent() {
+                    if (!this.newAgent.id || !this.newAgent.name) {
+                        await this.showAlert('Please fill in ID and Name');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('/api/agents', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.newAgent)
+                        });
+                        if (response.ok) {
+                            await this.loadAgents();
+                            this.newAgent = {
+                                id: '',
+                                name: '',
+                                description: '',
+                                systemPrompt: '',
+                                model: 'llama-3.3-70b-versatile',
+                                temperature: 0.7,
+                                maxTokens: 4096
+                            };
+                            await this.showAlert('Agent created successfully!');
+                        } else {
+                            const error = await response.json();
+                            await this.showAlert('Error: ' + (error.error || 'Failed to create agent'));
+                        }
+                    } catch (error) {
+                        console.error('Error creating agent:', error);
+                        await this.showAlert('Failed to create agent');
+                    }
+                },
+                async deleteAgent(id) {
+                    const confirmed = await this.showConfirm('Are you sure you want to delete this agent?');
+                    if (!confirmed) return;
+                    try {
+                        const response = await fetch(`/api/agents/${id}`, { method: 'DELETE' });
+                        if (response.ok) {
+                            await this.loadAgents();
+                            // Remove from workflow if present
+                            this.workflowNodes = this.workflowNodes.filter(n => n.agentId !== id);
+                            this.renderConnections();
+                        }
+                    } catch (error) {
+                        console.error('Error deleting agent:', error);
+                        await this.showAlert('Failed to delete agent');
+                    }
+                },
+                editAgent(agent, event) {
+                    this.editingAgent = agent.id;
+                    this.openEditDropdown = agent.id;
+                    this.editAgentForm = {
+                        id: agent.id,
+                        name: agent.name || '',
+                        description: agent.config?.description || '',
+                        systemPrompt: agent.config?.systemPrompt || '',
+                        model: agent.config?.model || 'llama-3.3-70b-versatile',
+                        temperature: agent.config?.temperature ?? 0.7,
+                        maxTokens: agent.config?.maxTokens ?? 4096
+                    };
+                    // Store button position for dropdown
+                    if (event && event.target) {
+                        const rect = event.target.getBoundingClientRect();
+                        this.editDropdownTop = rect.bottom + 8;
+                        this.editDropdownRight = window.innerWidth - rect.right;
+                    }
+                },
+                cancelEdit() {
+                    this.editingAgent = null;
+                    this.openEditDropdown = null;
+                    this.editAgentForm = {
+                        id: '',
+                        name: '',
+                        description: '',
+                        systemPrompt: '',
+                        model: 'llama-3.3-70b-versatile',
+                        temperature: 0.7,
+                        maxTokens: 4096
+                    };
+                },
+                async updateAgent() {
+                    if (!this.editAgentForm.name) {
+                        await this.showAlert('Please fill in Name');
+                        return;
+                    }
+                    try {
+                        const response = await fetch(`/api/agents/${this.editingAgent}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.editAgentForm)
+                        });
+                        if (response.ok) {
+                            await this.loadAgents();
+                            this.cancelEdit();
+                            await this.showAlert('Agent updated successfully!');
+                        } else {
+                            const error = await response.json();
+                            await this.showAlert('Error: ' + (error.error || 'Failed to update agent'));
+                        }
+                    } catch (error) {
+                        console.error('Error updating agent:', error);
+                        await this.showAlert('Failed to update agent');
+                    }
+                },
+                async loadMCPServers() {
+                    try {
+                        const response = await fetch('/api/mcp-servers');
+                        const servers = await response.json();
+                        this.mcpServers = servers;
+                        // Load assigned items for each server
+                        for (const server of this.mcpServers) {
+                            try {
+                                const assignedResponse = await fetch(`/api/mcp-servers/${server.id}/assigned`);
+                                if (assignedResponse.ok) {
+                                    server.assigned = await assignedResponse.json();
+                                } else {
+                                    server.assigned = { agents: [], workflows: [] };
+                                }
+                            } catch (e) {
+                                server.assigned = { agents: [], workflows: [] };
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error loading MCP servers:', error);
+                    }
+                },
+                async createMCPServer() {
+                    if (!this.newMCPServer.id || !this.newMCPServer.name) {
+                        await this.showAlert('Please fill in ID and Name');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('/api/mcp-servers', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                id: this.newMCPServer.id,
+                                config: this.newMCPServer
+                            })
+                        });
+                        if (response.ok) {
+                            await this.loadMCPServers();
+                            this.newMCPServer = {
+                                id: '',
+                                name: '',
+                                version: '1.0.0',
+                                description: ''
+                            };
+                            await this.showAlert('MCP Server created successfully!');
+                        } else {
+                            const error = await response.json();
+                            await this.showAlert('Error: ' + (error.error || 'Failed to create MCP server'));
+                        }
+                    } catch (error) {
+                        console.error('Error creating MCP server:', error);
+                        await this.showAlert('Failed to create MCP server');
+                    }
+                },
+                async deleteMCPServer(id) {
+                    const confirmed = await this.showConfirm('Are you sure you want to delete this MCP server?');
+                    if (!confirmed) return;
+                    try {
+                        const response = await fetch(`/api/mcp-servers/${id}`, { method: 'DELETE' });
+                        if (response.ok) {
+                            await this.loadMCPServers();
+                        }
+                    } catch (error) {
+                        console.error('Error deleting MCP server:', error);
+                        await this.showAlert('Failed to delete MCP server');
+                    }
+                },
+                addNodeToWorkflow(agent) {
+                    const nodeId = 'node-' + Date.now();
+                    this.workflowNodes.push({
+                        id: nodeId,
+                        agentId: agent.id,
+                        agentName: agent.name,
+                        x: 100 + (this.workflowNodes.length * 200),
+                        y: 100
+                    });
+                    this.$nextTick(() => {
+                        this.renderConnections();
+                    });
+                },
+                removeNodeFromWorkflow(nodeId) {
+                    this.workflowNodes = this.workflowNodes.filter(n => n.id !== nodeId);
+                    this.connections = this.connections.filter(c => c.from !== nodeId && c.to !== nodeId);
+                    this.$nextTick(() => {
+                        this.renderConnections();
+                    });
+                },
+                handleOutputClick(nodeId) {
+                    if (this.connectingFrom === nodeId) {
+                        this.connectingFrom = null;
+                        this.connectingFromNode = null;
+                        return;
+                    }
+                    const node = this.workflowNodes.find(n => n.id === nodeId);
+                    if (node) {
+                        this.connectingFrom = nodeId;
+                        this.connectingFromNode = node;
+                    }
+                },
+                handleInputClick(nodeId) {
+                    if (this.connectingFrom && this.connectingFrom !== nodeId) {
+                        const fromNode = this.workflowNodes.find(n => n.id === this.connectingFrom);
+                        const toNode = this.workflowNodes.find(n => n.id === nodeId);
+                        if (fromNode && toNode) {
+                            const connectionExists = this.connections.some(
+                                c => c.from === this.connectingFrom && c.to === nodeId
+                            );
+                            if (!connectionExists) {
+                                this.connections.push({
+                                    from: this.connectingFrom,
+                                    to: nodeId
+                                });
+                                this.$nextTick(() => {
+                                    this.renderConnections();
+                                });
+                            }
+                        }
+                        this.connectingFrom = null;
+                        this.connectingFromNode = null;
+                    }
+                },
+                renderConnections() {
+                    this.$nextTick(() => {
+                        const svg = this.$refs.svgCanvas;
+                        if (!svg) return;
+                        // Clear existing lines (keep defs)
+                        const existingLines = svg.querySelectorAll('line');
+                        existingLines.forEach(line => line.remove());
+                        this.connections.forEach(conn => {
+                            const fromNode = document.querySelector(`[data-node-id="${conn.from}"]`);
+                            const toNode = document.querySelector(`[data-node-id="${conn.to}"]`);
+                            if (fromNode && toNode) {
+                                const fromRect = fromNode.getBoundingClientRect();
+                                const svgRect = svg.getBoundingClientRect();
+                                const toRect = toNode.getBoundingClientRect();
+                                const x1 = fromRect.right - svgRect.left;
+                                const y1 = fromRect.top + fromRect.height / 2 - svgRect.top;
+                                const x2 = toRect.left - svgRect.left;
+                                const y2 = toRect.top + toRect.height / 2 - svgRect.top;
+                                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                                line.setAttribute('x1', x1);
+                                line.setAttribute('y1', y1);
+                                line.setAttribute('x2', x2);
+                                line.setAttribute('y2', y2);
+                                line.setAttribute('stroke', '#6366f1');
+                                line.setAttribute('stroke-width', '3');
+                                line.setAttribute('fill', 'none');
+                                line.setAttribute('marker-end', 'url(#arrowhead)');
+                                svg.appendChild(line);
+                            }
+                        });
+                    });
+                },
+                async executeWorkflow() {
+                    if (this.workflowNodes.length === 0) {
+                        await this.showAlert('Please add agents to the workflow first');
+                        return;
+                    }
+                    const agentIds = this.workflowNodes.map(n => n.agentId);
+                    if (agentIds.length === 0) {
+                        await this.showAlert('Please select agents for the workflow');
+                        return;
+                    }
+                    
+                    // Show prompt modal for input
+                    const input = await this.showPrompt('Enter input for the workflow:', 'Workflow Input', 'Enter your input here...');
+                    if (!input) return;
+                    
+                    this.isExecuting = true;
+                    this.executionResult = null;
+                    
+                    try {
+                        let workflowSteps = null;
+                        if (this.selectedStrategy === 'workflow' && this.workflowNodes.length > 0) {
+                            workflowSteps = this.workflowNodes.map((node) => ({
+                                id: node.id,
+                                agentId: node.agentId,
+                                condition: node.condition || undefined,
+                                next: this.connections
+                                    .filter(c => c.from === node.id)
+                                    .map(c => this.workflowNodes.find(n => n.id === c.to)?.id)
+                                    .filter(id => id)
+                            }));
+                        }
+                        const response = await fetch('/api/orchestrators/default/execute', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                input, 
+                                context: {},
+                                strategy: this.selectedStrategy,
+                                agents: agentIds,
+                                workflow: workflowSteps
+                            })
+                        });
+                        if (response.ok) {
+                            const result = await response.json();
+                            this.executionResult = result;
+                        } else {
+                            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                            await this.showAlert('Error: ' + (errorData.error || 'Failed to execute workflow'));
+                            this.executionResult = null;
+                        }
+                    } catch (error) {
+                        console.error('Execution error:', error);
+                        await this.showAlert('Failed to execute workflow: ' + error.message);
+                        this.executionResult = null;
+                    } finally {
+                        this.isExecuting = false;
+                    }
+                },
+                // Modal helper functions
+                showAlert(message, title = 'Alert') {
+                    return new Promise((resolve) => {
+                        this.modalType = 'alert';
+                        this.modalTitle = title;
+                        this.modalMessage = message;
+                        this.modalCallback = () => {
+                            this.modalOpen = false;
+                            resolve(true);
+                        };
+                        this.modalOpen = true;
+                    });
+                },
+                showConfirm(message, title = 'Confirm') {
+                    return new Promise((resolve) => {
+                        this.modalType = 'confirm';
+                        this.modalTitle = title;
+                        this.modalMessage = message;
+                        this.modalCallback = (confirmed) => {
+                            this.modalOpen = false;
+                            resolve(confirmed);
+                        };
+                        this.modalOpen = true;
+                    });
+                },
+                showPrompt(message, title = 'Input', placeholder = '') {
+                    return new Promise((resolve) => {
+                        this.modalType = 'prompt';
+                        this.modalTitle = title;
+                        this.modalMessage = message;
+                        this.modalInput = '';
+                        this.modalCallback = (value) => {
+                            this.modalOpen = false;
+                            resolve(value);
+                        };
+                        this.modalOpen = true;
+                        // Focus input after modal opens
+                        this.$nextTick(() => {
+                            const input = document.querySelector('#modal-input');
+                            if (input) input.focus();
+                        });
+                    });
+                },
+                handleModalConfirm() {
+                    if (this.modalType === 'prompt') {
+                        this.modalCallback(this.modalInput);
+                    } else {
+                        this.modalCallback(true);
+                    }
+                },
+                handleModalCancel() {
+                    if (this.modalType === 'prompt') {
+                        this.modalCallback(null);
+                    } else {
+                        this.modalCallback(false);
+                    }
+                },
+                async showAssignDialog(serverId) {
+                    this.selectedServerForAssign = serverId;
+                    this.assignDialogOpen = true;
+                    await this.loadAgents();
+                    this.availableAgentsForAssign = this.agents || [];
+                    this.availableWorkflowsForAssign = await this.getWorkflows() || [];
+                    try {
+                        const response = await fetch(`/api/mcp-servers/${serverId}/assigned`);
+                        if (response.ok) {
+                            const assigned = await response.json();
+                            this.selectedAgentsForAssign = assigned.agents.map(a => a.id);
+                            this.selectedWorkflowsForAssign = assigned.workflows || [];
+                        }
+                    } catch (e) {
+                        this.selectedAgentsForAssign = [];
+                        this.selectedWorkflowsForAssign = [];
+                    }
+                },
+                async getWorkflows() {
+                    try {
+                        const response = await fetch('/api/orchestrators');
+                        if (response.ok) {
+                            const orchestrators = await response.json();
+                            return orchestrators.map((orch) => ({ id: orch.id || orch }));
+                        }
+                        return [];
+                    } catch (error) {
+                        console.error('Error loading workflows:', error);
+                        return [];
+                    }
+                },
+                async assignToServer() {
+                    if (!this.selectedServerForAssign) return;
+                    try {
+                        if (this.selectedAgentsForAssign.length > 0) {
+                            await fetch(`/api/mcp-servers/${this.selectedServerForAssign}/assign-agents`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ agentIds: this.selectedAgentsForAssign })
+                            });
+                        }
+                        if (this.selectedWorkflowsForAssign.length > 0) {
+                            await fetch(`/api/mcp-servers/${this.selectedServerForAssign}/assign-workflows`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ workflowIds: this.selectedWorkflowsForAssign })
+                            });
+                        }
+                            await this.showAlert('Agents and workflows assigned successfully!');
+                        this.assignDialogOpen = false;
+                        await this.loadMCPServers();
+                    } catch (error) {
+                        console.error('Error assigning:', error);
+                        await this.showAlert('Failed to assign agents/workflows');
+                    }
+                },
+                async saveConfiguration() {
+                    try {
+                        const response = await fetch('/api/config/save', { method: 'POST' });
+                        if (response.ok) {
+                            await this.showAlert('Configuration saved successfully!');
+                        } else {
+                            await this.showAlert('Failed to save configuration');
+                        }
+                    } catch (error) {
+                        console.error('Error saving:', error);
+                        await this.showAlert('Failed to save configuration');
+                    }
+                },
+                async loadConfiguration() {
+                    try {
+                        const response = await fetch('/api/config/load', { method: 'POST' });
+                        if (response.ok) {
+                            await this.loadAgents();
+                            await this.loadMCPServers();
+                            await this.showAlert('Configuration loaded successfully!');
+                        } else {
+                            await this.showAlert('Failed to load configuration');
+                        }
+                    } catch (error) {
+                        console.error('Error loading:', error);
+                        await this.showAlert('Failed to load configuration');
+                    }
+                },
+                dragStart(event, agent) {
+                    this.draggedAgent = agent;
+                    event.dataTransfer.effectAllowed = 'move';
+                },
+                drop(event) {
+                    event.preventDefault();
+                    if (!this.draggedAgent) return;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const x = event.clientX - rect.left;
+                    const y = event.clientY - rect.top;
+                    const node = {
+                        id: 'node_' + Date.now(),
+                        agentId: this.draggedAgent.id,
+                        agentName: this.draggedAgent.name,
+                        x: Math.max(0, x - 100),
+                        y: Math.max(0, y - 50),
+                        condition: ''
+                    };
+                    this.workflowNodes.push(node);
+                    this.draggedAgent = null;
+                    this.$nextTick(() => {
+                        this.renderConnections();
+                    });
+                },
+                startDrag(event, node) {
+                    if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON' || 
+                        event.target.classList.contains('connection-point')) return;
+                    event.preventDefault();
+                    const canvas = event.currentTarget.closest('.border-2') || document.querySelector('.border-2');
+                    if (!canvas) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const startX = event.clientX - rect.left - node.x;
+                    const startY = event.clientY - rect.top - node.y;
+                    const onMouseMove = (e) => {
+                        const canvasRect = canvas.getBoundingClientRect();
+                        node.x = Math.max(0, Math.min(e.clientX - canvasRect.left - startX, canvasRect.width - 200));
+                        node.y = Math.max(0, Math.min(e.clientY - canvasRect.top - startY, canvasRect.height - 100));
+                        this.renderConnections();
+                    };
+                    const onMouseUp = () => {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                        this.renderConnections();
+                    };
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                },
+                removeNode(nodeId) {
+                    this.workflowNodes = this.workflowNodes.filter(n => n.id !== nodeId);
+                    this.connections = this.connections.filter(c => c.from !== nodeId && c.to !== nodeId);
+                    if (this.connectingFrom === nodeId) {
+                        this.connectingFrom = null;
+                        this.connectingFromNode = null;
+                    }
+                    this.$nextTick(() => {
+                        this.renderConnections();
+                    });
+                },
+                async setAsStart(nodeId) {
+                    this.startNodeId = nodeId;
+                    await this.showAlert('Start node set');
+                },
+                async saveWorkflow() {
+                    if (!this.workflowName) {
+                        await this.showAlert('Please enter a workflow name');
+                        return;
+                    }
+                    if (this.workflowNodes.length === 0) {
+                        await this.showAlert('Please add agents to the workflow first');
+                        return;
+                    }
+                    
+                    try {
+                        // Convert workflow nodes and connections to workflow steps
+                        let workflowSteps = [];
+                        if (this.selectedStrategy === 'workflow' && this.workflowNodes.length > 0) {
+                            workflowSteps = this.workflowNodes.map((node) => ({
+                                id: node.id,
+                                agentId: node.agentId,
+                                condition: node.condition || undefined,
+                                next: this.connections
+                                    .filter(c => c.from === node.id)
+                                    .map(c => this.workflowNodes.find(n => n.id === c.to)?.id)
+                                    .filter(id => id)
+                            }));
+                        }
+                        
+                        const agentIds = this.workflowNodes.map(n => n.agentId);
+                        const workflowId = 'workflow-' + this.workflowName.toLowerCase().replace(/\s+/g, '-');
+                        
+                        const response = await fetch('/api/workflows', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                id: workflowId,
+                                name: this.workflowName,
+                                strategy: this.selectedStrategy,
+                                agents: agentIds,
+                                workflow: workflowSteps.length > 0 ? workflowSteps : undefined
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            await this.showAlert('Workflow saved successfully!');
+                            // Optionally reload workflows
+                            await this.loadWorkflows();
+                        } else {
+                            const error = await response.json();
+                            await this.showAlert('Error: ' + (error.error || 'Failed to save workflow'));
+                        }
+                    } catch (error) {
+                        console.error('Error saving workflow:', error);
+                        await this.showAlert('Failed to save workflow: ' + (error.message || error));
+                    }
+                },
+                async loadWorkflows() {
+                    try {
+                        const response = await fetch('/api/workflows');
+                        if (response.ok) {
+                            const workflows = await response.json();
+                            // You can use this to populate a workflows list if needed
+                            console.log('Loaded workflows:', workflows);
+                        }
+                    } catch (error) {
+                        console.error('Error loading workflows:', error);
+                    }
+                },
+                async clearCanvas() {
+                    const confirmed = await this.showConfirm('Clear the entire workflow?');
+                    if (confirmed) {
+                        // Clear all workflow state
+                        this.workflowNodes = [];
+                        this.connections = [];
+                        this.executionResult = null;
+                        this.workflowName = '';
+                        this.startNodeId = null;
+                        this.connectingFrom = null;
+                        this.connectingFromNode = null;
+                        
+                        // Clear SVG connections
+                        this.$nextTick(() => {
+                            const svg = this.$refs.svgCanvas;
+                            if (svg) {
+                                // Remove all lines (keep defs)
+                                const lines = svg.querySelectorAll('line');
+                                lines.forEach(line => line.remove());
+                            }
+                            this.renderConnections();
+                        });
+                    }
+                },
+                init() {
+                    this.loadAgents();
+                    this.loadMCPServers();
+                    this.$nextTick(() => {
+                        this.renderConnections();
+                    });
+                }
+            };
+        }
+    </script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .workflow-node {
+            transition: all 0.2s;
+        }
+        .workflow-node:hover {
+            transform: scale(1.05);
+        }
+        .workflow-connection {
+            stroke: #6366f1 !important;
+            stroke-width: 3 !important;
+            fill: none;
+            marker-end: url(#arrowhead);
+            filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.3));
+            pointer-events: stroke;
+        }
+        .connection-point {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #6366f1;
+            border: 3px solid white;
+            cursor: crosshair;
+            position: absolute;
+            z-index: 10;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .connection-point::after {
+            content: '→';
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        .connection-point.input::after {
+            content: '←';
+        }
+        .connection-point:hover {
+            background: #4f46e5;
+            transform: scale(1.4);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
+        }
+        .connection-point.selected {
+            background: #10b981;
+            transform: scale(1.5);
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3);
+        }
+        .connection-point.output {
+            right: -10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .connection-point.input {
+            left: -10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .connecting-line {
+            stroke: #6366f1;
+            stroke-width: 3;
+            stroke-dasharray: 8,4;
+            pointer-events: none;
+            opacity: 0.8;
+        }
+        .workflow-node {
+            position: relative;
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div x-data="workflowApp()" class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-md border-b border-slate-200 sticky top-0 z-40">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+                <h1 class="text-2xl font-semibold text-slate-900 tracking-tight">MCP Agents & Workflow Builder</h1>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="border-b border-slate-200">
+                <nav class="-mb-px flex items-center justify-between">
+                    <div class="flex space-x-8">
+                        <button @click="activeTab = 'agents'" :class="activeTab === 'agents' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200">
+                            Agents
+                        </button>
+                        <button @click="activeTab = 'mcp-servers'" :class="activeTab === 'mcp-servers' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200">
+                            MCP Servers
+                        </button>
+                        <button @click="activeTab = 'workflows'" :class="activeTab === 'workflows' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200">
+                            Workflows
+                        </button>
+                    </div>
+                    <div class="flex gap-2 items-center">
+                        <button @click="saveConfiguration()" class="px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-colors font-medium text-sm whitespace-nowrap" style="background-color: #059669; color: #ffffff;">
+                            Save Config
+                        </button>
+                        <button @click="loadConfiguration()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors font-medium text-sm whitespace-nowrap" style="background-color: #4f46e5; color: #ffffff;">
+                            Load Config
+                        </button>
+                    </div>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Agents Tab -->
+        <div x-show="activeTab === 'agents'" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Create Agent Form -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                        <h2 class="text-lg font-semibold text-slate-900 mb-6">Create Agent</h2>
+                        <form @submit.prevent="createAgent()" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2">Agent ID</label>
+                                <input type="text" x-model="newAgent.id" required class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200 text-sm" placeholder="agent-1">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2">Name</label>
+                                <input type="text" x-model="newAgent.name" required class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200 text-sm" placeholder="Research Agent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                                <textarea x-model="newAgent.description" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200 text-sm" rows="2"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2">System Prompt</label>
+                                <textarea x-model="newAgent.systemPrompt" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200 text-sm" rows="3"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2">Model</label>
+                                <select x-model="newAgent.model" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200 text-sm bg-white">
+                                    <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
+                                    <option value="groq/compound">groq/compound</option>
+                                    <option value="groq/compound-mini">groq/compound-mini</option>
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700 mb-2">Temperature</label>
+                                    <input type="number" x-model="newAgent.temperature" step="0.1" min="0" max="2" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200 text-sm" value="0.7">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700 mb-2">Max Tokens</label>
+                                    <input type="number" x-model="newAgent.maxTokens" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200 text-sm" value="4096">
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full px-4 py-2.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors font-medium">
+                                Create Agent
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Agents List -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-lg font-semibold text-slate-900">Available Agents</h2>
+                            <button @click="loadAgents()" class="inline-flex items-center gap-2 px-4 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 transition-all duration-200 font-medium shadow-sm hover:shadow">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="space-y-3 max-h-96 overflow-y-auto">
+                            <template x-for="agent in agents" :key="agent.id">
+                                <div class="p-4 border rounded-xl border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 relative bg-white shadow-sm">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex-1">
+                                            <div class="font-semibold text-slate-900" x-text="agent.name"></div>
+                                            <div class="text-sm text-slate-500 mt-0.5" x-text="agent.id"></div>
+                                            <div class="text-xs text-slate-400 mt-2" x-text="agent.config?.description || ''"></div>
+                                            <div class="text-xs text-slate-500 mt-1 font-medium" x-text="'Model: ' + (agent.config?.model || 'default')"></div>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <button @click="editAgent(agent, $event)" class="px-3 py-1 text-sm bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200">
+                                                Edit
+                                            </button>
+                                            <button @click="deleteAgent(agent.id)" class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <div x-show="agents.length === 0" class="text-center text-slate-400 py-12">
+                                <p class="text-sm">No agents created yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Agent Dropdown -->
+        <div x-show="openEditDropdown" 
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="transform opacity-0 scale-95"
+             x-transition:enter-end="transform opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="transform opacity-100 scale-100"
+             x-transition:leave-end="transform opacity-0 scale-95"
+             @click.away="openEditDropdown = null"
+             class="fixed bg-white rounded-xl shadow-2xl border border-slate-200 z-[100] p-6 space-y-4"
+             x-bind:style="'top: ' + editDropdownTop + 'px; right: ' + editDropdownRight + 'px; width: 24rem;'"
+             style="display: none;">
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-2">Name</label>
+                <input type="text" x-model="editAgentForm.name" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-2">Description</label>
+                <textarea x-model="editAgentForm.description" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200" rows="2"></textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-2">System Prompt</label>
+                <textarea x-model="editAgentForm.systemPrompt" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200" rows="3"></textarea>
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-2">Model</label>
+                    <select x-model="editAgentForm.model" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200 bg-white">
+                        <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
+                        <option value="groq/compound">groq/compound</option>
+                        <option value="groq/compound-mini">groq/compound-mini</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-2">Temperature</label>
+                    <input type="number" x-model="editAgentForm.temperature" step="0.1" min="0" max="2" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-2">Max Tokens</label>
+                    <input type="number" x-model="editAgentForm.maxTokens" min="1" max="8192" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200">
+                </div>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <button @click="updateAgent(); openEditDropdown = null" class="flex-1 px-4 py-2 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-colors font-medium">
+                    Save
+                </button>
+                <button @click="cancelEdit()" class="flex-1 px-4 py-2 text-sm bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 transition-colors font-medium">
+                    Cancel
+                </button>
+            </div>
+        </div>
+
+        <!-- MCP Servers Tab -->
+        <div x-show="activeTab === 'mcp-servers'" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Create MCP Server Form -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Create MCP Server</h2>
+                        <form @submit.prevent="createMCPServer()" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Server ID</label>
+                                <input type="text" x-model="newMCPServer.id" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" placeholder="server-1">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                                <input type="text" x-model="newMCPServer.name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" placeholder="My MCP Server">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Version</label>
+                                <input type="text" x-model="newMCPServer.version" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" placeholder="1.0.0">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <textarea x-model="newMCPServer.description" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" rows="2"></textarea>
+                            </div>
+                            <button type="submit" class="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                                Create MCP Server
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- MCP Servers List -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold text-gray-900">MCP Servers</h2>
+                            <button @click="loadMCPServers()" class="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="space-y-4 max-h-96 overflow-y-auto">
+                            <template x-for="server in mcpServers" :key="server.id">
+                                <div class="p-4 border rounded-lg border-gray-200 hover:bg-gray-50">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div>
+                                            <div class="font-medium text-gray-900" x-text="server.name"></div>
+                                            <div class="text-sm text-gray-500" x-text="server.id"></div>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <button @click="showAssignDialog(server.id)" class="px-3 py-1 text-sm bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200">
+                                                Assign
+                                            </button>
+                                            <button @click="deleteMCPServer(server.id)" class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <!-- Assigned Items -->
+                                    <div x-show="server.assigned" class="mt-3 pt-3 border-t border-gray-200">
+                                        <div class="text-xs text-gray-500 mb-2">Assigned:</div>
+                                        <div class="flex flex-wrap gap-2">
+                                            <template x-for="agent in (server.assigned?.agents || [])" :key="agent.id">
+                                                <span class="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded" x-text="agent.name"></span>
+                                            </template>
+                                            <template x-for="workflow in (server.assigned?.workflows || [])" :key="workflow">
+                                                <span class="px-2 py-1 text-xs bg-green-100 text-green-700 rounded" x-text="'Workflow: ' + workflow"></span>
+                                            </template>
+                                            <span x-show="(!server.assigned?.agents || server.assigned.agents.length === 0) && (!server.assigned?.workflows || server.assigned.workflows.length === 0)" class="text-xs text-gray-400">
+                                                No agents or workflows assigned
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <div x-show="mcpServers.length === 0" class="text-center text-gray-400 py-8">
+                                No MCP servers created yet
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflows Tab -->
+        <div x-show="activeTab === 'workflows'" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <!-- Left Sidebar - Agents & Tools -->
+                <div class="lg:col-span-1 space-y-4">
+                    <!-- Agents Panel -->
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Available Agents</h2>
+                        <div class="space-y-2 max-h-64 overflow-y-auto">
+                            <template x-for="agent in agents" :key="agent.id">
+                                <div 
+                                    class="p-3 border rounded-lg cursor-move hover:bg-indigo-50 border-gray-200"
+                                    draggable="true"
+                                    @dragstart="dragStart($event, agent)"
+                                >
+                                    <div class="font-medium text-sm text-gray-900" x-text="agent.name"></div>
+                                    <div class="text-xs text-gray-500" x-text="agent.id"></div>
+                                </div>
+                            </template>
+                        </div>
+                        <button @click="loadAgents()" class="mt-4 w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                            Refresh Agents
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Main Canvas - Workflow Builder -->
+                <div class="lg:col-span-3">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-lg font-semibold text-gray-900">Workflow Canvas</h2>
+                            <div class="flex gap-2">
+                                <input type="text" x-model="workflowName" placeholder="Workflow Name" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                <select x-model="selectedStrategy" class="px-3 py-2 border rounded-lg border-gray-300 text-sm">
+                                    <option value="sequential">Sequential</option>
+                                    <option value="parallel">Parallel</option>
+                                    <option value="workflow">Custom Workflow</option>
+                                </select>
+                                <button @click="saveWorkflow()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+                                    Save Workflow
+                                </button>
+                                <button @click="executeWorkflow()" :disabled="isExecuting" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm flex items-center gap-2">
+                                    <svg x-show="isExecuting" class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span x-text="isExecuting ? 'Executing...' : 'Execute'"></span>
+                                </button>
+                                <button @click="clearCanvas()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Canvas Area -->
+                        <div 
+                            class="border-2 border-dashed border-gray-300 rounded-lg p-8 min-h-[500px] bg-gray-50 relative overflow-auto"
+                            @drop="drop($event)"
+                            @dragover.prevent
+                            @dragenter.prevent
+                            x-ref="canvas"
+                        >
+                            <!-- SVG for connections -->
+                            <svg 
+                                class="absolute inset-0 w-full h-full pointer-events-none" 
+                                style="z-index: 1; overflow: visible;"
+                                x-ref="svgCanvas"
+                            >
+                                <defs>
+                                    <marker id="arrowhead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+                                        <polygon points="0 0, 12 6, 0 12" fill="#6366f1" stroke="#6366f1" stroke-width="1" />
+                                    </marker>
+                                    <marker id="arrowhead-hover" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="strokeWidth">
+                                        <polygon points="0 0, 14 7, 0 14" fill="#4f46e5" stroke="#4f46e5" stroke-width="1" />
+                                    </marker>
+                                </defs>
+                            </svg>
+
+                            <!-- Workflow Nodes -->
+                            <div class="relative" style="z-index: 2;">
+                                <template x-for="(node, index) in workflowNodes" :key="node.id">
+                                    <div 
+                                        class="workflow-node absolute bg-white border-2 border-indigo-500 rounded-lg shadow-lg p-4"
+                                        :style="`left: ${node.x}px; top: ${node.y}px; width: 200px;`"
+                                        :data-node-id="node.id"
+                                    >
+                                        <div class="flex items-center justify-between mb-2">
+                                            <span class="font-semibold text-sm text-gray-900" x-text="node.agentName || 'Agent'"></span>
+                                            <button @click="removeNode(node.id)" class="text-red-600 hover:text-red-800 text-xs">×</button>
+                                        </div>
+                                        <div class="text-xs text-gray-500 mb-2" x-text="node.agentId"></div>
+                                        <input 
+                                            type="text" 
+                                            x-model="node.condition"
+                                            placeholder="Condition (optional)"
+                                            class="w-full px-2 py-1 text-xs border rounded border-gray-300 mb-2"
+                                            @mousedown.stop
+                                        />
+                                        <div class="flex gap-1 mb-2">
+                                            <button @click="setAsStart(node.id)" class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200">
+                                                Start
+                                            </button>
+                                        </div>
+                                        
+                                        <!-- Connection Points -->
+                                        <div 
+                                            class="connection-point output"
+                                            :class="{ 'selected': connectingFrom === node.id }"
+                                            @click.stop="handleOutputClick(node.id)"
+                                            title="Click to connect to another node"
+                                        ></div>
+                                        <div 
+                                            class="connection-point input"
+                                            :class="{ 'selected': connectingTo === node.id }"
+                                            @click.stop="handleInputClick(node.id)"
+                                            title="Click to receive connection"
+                                        ></div>
+                                        
+                                        <!-- Drag handle -->
+                                        <div 
+                                            class="absolute top-2 right-8 cursor-move text-gray-400 hover:text-gray-600"
+                                            @mousedown="startDrag($event, node)"
+                                            title="Drag to move"
+                                        >⋮⋮</div>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div x-show="workflowNodes.length === 0" class="text-center text-gray-400 py-20">
+                                <p class="text-lg mb-2">Drag agents here to build your workflow</p>
+                                <p class="text-sm">Click → (right arrow) then ← (left arrow) to connect nodes</p>
+                            </div>
+                            
+                            <!-- Connection Hint -->
+                            <div x-show="connectingFrom && workflowNodes.length > 0" class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-indigo-100 text-indigo-800 px-4 py-2 rounded-lg shadow-lg z-50 border-2 border-indigo-500">
+                                <p class="text-sm font-medium">✨ Click on the ← (left arrow) of another node to connect</p>
+                                <button @click="connectingFrom = null; connectingFromNode = null" class="text-xs mt-1 text-indigo-600 underline hover:text-indigo-800">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Execution Results -->
+                    <div x-show="executionResult && executionResult.steps" class="mt-6 bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Execution Results</h3>
+                        <div class="space-y-4">
+                            <template x-for="(step, index) in (executionResult?.steps || [])" :key="index">
+                                <div class="border-l-4 border-indigo-500 pl-4">
+                                    <div class="font-medium text-sm text-gray-900" x-text="'Agent: ' + step.agentId"></div>
+                                    <div class="text-sm text-gray-600 mt-1" x-text="step.response"></div>
+                                </div>
+                            </template>
+                            <div class="mt-4 p-4 bg-green-50 rounded-lg" x-show="executionResult?.result">
+                                <div class="font-medium text-sm text-gray-900 mb-2">Final Result:</div>
+                                <div class="text-sm text-gray-700" x-text="executionResult?.result || 'No result'"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assign Dialog -->
+        <div x-show="assignDialogOpen" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="assignDialogOpen = false">
+            <div class="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Assign Agents & Workflows</h3>
+                
+                <!-- Agents Selection -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Agents</label>
+                    <div class="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded p-2">
+                        <template x-for="agent in availableAgentsForAssign" :key="agent.id">
+                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                                <input type="checkbox" :value="agent.id" x-model="selectedAgentsForAssign" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <span class="text-sm text-gray-900" x-text="agent.name"></span>
+                                <span class="text-xs text-gray-500" x-text="'(' + agent.id + ')'"></span>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Workflows Selection -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Workflows</label>
+                    <div class="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded p-2">
+                        <template x-for="workflow in availableWorkflowsForAssign" :key="workflow.id || workflow">
+                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                                <input type="checkbox" :value="workflow.id || workflow" x-model="selectedWorkflowsForAssign" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <span class="text-sm text-gray-900" x-text="'Workflow: ' + (workflow.id || workflow)"></span>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2">
+                    <button @click="assignDialogOpen = false" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                        Cancel
+                    </button>
+                    <button @click="assignToServer()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                        Assign
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Dialog -->
+        <div x-show="modalOpen" 
+         x-transition:enter="ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+         @click.self="handleModalCancel()"
+         @keydown.escape.window="handleModalCancel()">
+        <div x-show="modalOpen"
+             x-transition:enter="ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+             x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+             x-transition:leave="ease-in duration-200"
+             x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+             x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+             class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4" x-text="modalTitle"></h3>
+            <p class="text-sm text-gray-600 mb-4" x-text="modalMessage"></p>
+            
+            <!-- Input field for prompt -->
+            <div x-show="modalType === 'prompt'" class="mb-4">
+                <input type="text" 
+                       id="modal-input"
+                       x-model="modalInput"
+                       @keydown.enter="handleModalConfirm()"
+                       @keydown.escape="handleModalCancel()"
+                       placeholder="Enter your input here..."
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            
+            <div class="flex justify-end gap-2">
+                <template x-if="modalType === 'confirm' || modalType === 'prompt'">
+                    <button @click="handleModalCancel()" 
+                            class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                        <span x-text="modalCancelText"></span>
+                    </button>
+                </template>
+                <button @click="handleModalConfirm()" 
+                        class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                    <span x-text="modalConfirmText"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

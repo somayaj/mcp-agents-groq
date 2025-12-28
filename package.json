@@ -1,0 +1,46 @@
+{
+  "name": "mcp-agents-groq",
+  "version": "1.0.0",
+  "description": "A framework for creating AI MCP servers, agents, and orchestration with Groq integration",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:css && tsc",
+    "build:css": "node build-css.js",
+    "dev": "npm run build:css && tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "example": "tsx examples/basic.ts",
+    "example:workflow": "tsx examples/workflow.ts",
+    "example:governance": "tsx examples/governance-example.ts",
+    "run:workflow": "tsx examples/run-workflow.ts",
+    "test:mcp": "tsx examples/test-mcp-client.ts",
+    "http:mcp": "tsx examples/http-mcp-server.ts"
+  },
+  "keywords": [
+    "mcp",
+    "agents",
+    "groq",
+    "ai",
+    "orchestration"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "groq-sdk": "^0.3.0",
+    "ws": "^8.14.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@types/ws": "^8.5.10",
+    "autoprefixer": "^10.4.23",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

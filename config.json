@@ -1,0 +1,197 @@
+{
+  "agents": [
+    {
+      "id": "agent-1",
+      "name": "Research Agent",
+      "description": "An agent that helps with research tasks",
+      "systemPrompt": "You are a helpful research assistant. Provide detailed and accurate information.",
+      "model": "groq/compound",
+      "temperature": 0.7,
+      "maxTokens": 4096
+    },
+    {
+      "id": "agent-2",
+      "name": "Writing Agent",
+      "description": "An agent that helps with writing tasks",
+      "systemPrompt": "You are a professional writer. Create well-structured and engaging content."
+    },
+    {
+      "id": "agent-3",
+      "name": "Web Agent",
+      "description": "An agent that finds content over the web",
+      "systemPrompt": "you are a web agent that finds content on the web for the query posted",
+      "model": "llama-3.3-70b-versatile",
+      "temperature": 0.7,
+      "maxTokens": 4096
+    }
+  ],
+  "mcpServers": [
+    {
+      "id": "server-1",
+      "config": {
+        "assignedAgents": [
+          "agent-1",
+          "agent-2",
+          "agent-3"
+        ],
+        "assignedWorkflows": [
+          "orchestrator-1"
+        ]
+      }
+    },
+    {
+      "id": "server-2",
+      "config": {
+        "assignedAgents": [
+          "agent-1"
+        ],
+        "assignedWorkflows": []
+      }
+    }
+  ],
+  "orchestrators": [
+    {
+      "id": "orchestrator-1",
+      "config": {
+        "agents": [
+          "agent-1",
+          "agent-2"
+        ]
+      }
+    },
+    {
+      "id": "default",
+      "config": {
+        "agents": [
+          "agent-1"
+        ],
+        "workflow": [
+          {
+            "id": "node_1766891645787",
+            "agentId": "agent-1",
+            "next": [
+              "node_1766891646934"
+            ]
+          },
+          {
+            "id": "node_1766891646934",
+            "agentId": "agent-2",
+            "next": [
+              "node_1766891648219"
+            ]
+          },
+          {
+            "id": "node_1766891648219",
+            "agentId": "agent-3",
+            "next": []
+          }
+        ],
+        "strategy": "sequential"
+      }
+    },
+    {
+      "id": "workflow-custom_workflow",
+      "config": {
+        "strategy": "workflow",
+        "agents": [
+          "agent-1",
+          "agent-2",
+          "agent-3"
+        ],
+        "workflow": [
+          {
+            "id": "node_1766891645787",
+            "agentId": "agent-1",
+            "next": [
+              "node_1766891646934"
+            ]
+          },
+          {
+            "id": "node_1766891646934",
+            "agentId": "agent-2",
+            "next": [
+              "node_1766891648219"
+            ]
+          },
+          {
+            "id": "node_1766891648219",
+            "agentId": "agent-3",
+            "next": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "workflow-test_wrkl",
+      "config": {
+        "strategy": "sequential",
+        "agents": [
+          "agent-1"
+        ]
+      }
+    }
+  ],
+  "workflows": [
+    {
+      "id": "default",
+      "name": "default",
+      "strategy": "sequential",
+      "agents": [
+        "agent-1"
+      ],
+      "workflow": [
+        {
+          "id": "node_1766891645787",
+          "agentId": "agent-1",
+          "next": [
+            "node_1766891646934"
+          ]
+        },
+        {
+          "id": "node_1766891646934",
+          "agentId": "agent-2",
+          "next": [
+            "node_1766891648219"
+          ]
+        },
+        {
+          "id": "node_1766891648219",
+          "agentId": "agent-3",
+          "next": []
+        }
+      ]
+    },
+    {
+      "id": "workflow-custom_workflow",
+      "name": "workflow-custom_workflow",
+      "strategy": "workflow",
+      "agents": [
+        "agent-1",
+        "agent-2",
+        "agent-3"
+      ],
+      "workflow": [
+        {
+          "id": "node_1766891645787",
+          "agentId": "agent-1",
+          "next": [
+            "node_1766891646934"
+          ]
+        },
+        {
+          "id": "node_1766891646934",
+          "agentId": "agent-2",
+          "next": [
+            "node_1766891648219"
+          ]
+        },
+        {
+          "id": "node_1766891648219",
+          "agentId": "agent-3",
+          "next": []
+        }
+      ]
+    }
+  ],
+  "timestamp": "2025-12-28T03:39:42.345Z"
+}
